@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package archive;
+
+option go_package = ".;netpb";
+
+message Payload {
+  int64 type = 1;
+  bytes data = 2;
+}
+
+message PageRequest {
+  int64 id = 1;
+}
+
+message PageResponse {
+  bool found = 1;
+  int64 chunk_size = 2;
+  int64 chunk_num = 3;
+}
+
+message PageChunk {
+  int64 id = 1;
+  int64 chunk = 2;
+  bytes data = 3;
+}

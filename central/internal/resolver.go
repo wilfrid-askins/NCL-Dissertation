@@ -9,7 +9,6 @@ import (
 type Resolver struct {
 	db *sql.DB
 	records *record.Repository
-	// listener
 	logger *zap.SugaredLogger
 	config Config
 }
@@ -37,12 +36,12 @@ func (re *Resolver) Records() *record.Repository {
 	if re.records != nil {
 		return re.records
 	}
-	re.records = record.NewRepository(re.Database())
+	records, err := record.NewRepository(re.Database())
+	if err != nil {
+		re.Logger().Fatalw("creating records repository", "err", err)
+	}
+	re.records = records
 	return re.records
-}
-
-func (re *Resolver) Listener() {
-
 }
 
 func (re *Resolver) Logger() *zap.SugaredLogger {
@@ -52,4 +51,5 @@ func (re *Resolver) Logger() *zap.SugaredLogger {
 	logger, _ := zap.NewProduction()
 	sugar := logger.Sugar()
 	re.logger = sugar
+	return re.logger
 }
