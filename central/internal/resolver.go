@@ -2,12 +2,16 @@ package internal
 
 import (
 	"database/sql"
-	"wilfrid.me/archive-central/internal/record"
 	"go.uber.org/zap"
+	"wilfrid.me/archive-central/internal/peers"
+	"wilfrid.me/archive-central/internal/record"
+	"wilfrid.me/archive-central/internal/web"
 )
 
 type Resolver struct {
 	db *sql.DB
+	group *peers.Group
+	server *web.Server
 	records *record.Repository
 	logger *zap.SugaredLogger
 	config Config
@@ -30,6 +34,22 @@ func (re *Resolver) Database() *sql.DB {
 	}
 	re.db = conn
 	return re.db
+}
+
+func (re *Resolver) Group() *peers.Group {
+	if re.group != nil {
+		return re.group
+	}
+	re.group = peers.NewGroup()
+	return re.group
+}
+
+func (re *Resolver) WebServer() *web.Server {
+	if re.server != nil {
+		return re.server
+	}
+	re.server = web.NewServer(re.Group(), re.Logger())
+	return re.server
 }
 
 func (re *Resolver) Records() *record.Repository {

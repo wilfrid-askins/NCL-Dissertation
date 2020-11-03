@@ -3,12 +3,14 @@ package file
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"io/ioutil"
 	"os"
 	"wilfrid.me/netpb/pkg/archive"
 )
 
 type Repository struct {
-	directory string
+	basePath string
+	storePath string
 }
 
 func NewRepository() (*Repository, error) {
@@ -17,21 +19,37 @@ func NewRepository() (*Repository, error) {
 		return nil, errors.Wrap(err, "finding working directory")
 	}
 
-	directory := path + "/store/"
-	if err := os.Mkdir(directory, os.ModeDir); err != nil {
-		return nil, errors.Wrap(err, "creating store directory")
+	basePath := path + "/archive/"
+	storePath := basePath + "/store/"
+	paths := []string{
+		basePath,
+		storePath,
+	}
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if err := os.Mkdir(path, os.ModePerm); err != nil {
+				return nil, errors.Wrap(err, "creating directory")
+			}
+		}
 	}
 
 	return &Repository{
-		directory: directory,
+		basePath: basePath,
+		storePath: storePath,
 	}, nil
 }
 
-func Get(s archive.Snapshot) ([]byte, error) {
+func (r *Repository) Get(s archive.Snapshot) ([]byte, error) {
 	// check cache for snapshot data
 	// read snapshot data from file
 	// return data
-	return nil, nil
+	path := fmt.Sprintf("%s%d.html", r.storePath, s.ID)
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading file")
+	}
+	return data, nil
 }
 
 func Store(s archive.Snapshot, data []byte) error {
