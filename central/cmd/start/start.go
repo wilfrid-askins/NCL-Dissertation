@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"wilfrid.me/archive-central/internal"
 )
@@ -9,22 +10,28 @@ func main() {
 	config := internal.LoadConfig()
 	resolver := internal.NewResolver(config)
 
-	// use chi
-	// create http server
-	// forward to server.HTTP() or something
-	// consider moving to other module
+	//_, err := resolver.Records().Add(archive.Snapshot{
+	//	Sum:    "abcdefgh",
+	//	URL:    "https://google.com",
+	//	Time:   time.Now(),
+	//	Origin: "localhost:25565",
+	//})
+	//if err != nil {
+	//	panic(err)
+	//}
+	//
+	//s, err := resolver.Records().Get(1)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//println(s.ID)
+	//println(s.Origin)
+	//println(s.URL)
 
 	ws := resolver.WebServer()
-	err := http.ListenAndServe(":3000", ws.GetRouter())
+	port := fmt.Sprintf(":%d", config.Server.Port)
+	err := http.ListenAndServe(port, ws.GetRouter())
 	if err != nil {
 		resolver.Logger().Errorw("webserver failed to listen", "msg", err.Error())
 	}
-
-	//g := peers.NewGroup()
-	//data, err := g.Get(112)
-	//if err != nil {
-	//	println(err.Error())
-	//}
-	//println(string(data))
-
 }

@@ -11,8 +11,18 @@ services:
       MYSQL_DATABASE: dev
       MYSQL_USER: dev
       MYSQL_PASSWORD: dev
+    ports:
+      - "3306:3306"
 
   consul-agent:
     image: consul:latest
+    volumes:
+    - consul_data:/consul/data
     ports:
       - "8500:8500"
+
+volumes:
+  db_data:
+    external: false
+  consul_data:
+    external: false

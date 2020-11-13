@@ -127,7 +127,7 @@ func (x *PageRequest) GetId() int64 {
 	return 0
 }
 
-type PageResponse struct {
+type PageTransfer struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -139,8 +139,8 @@ type PageResponse struct {
 	TotalSize int64 `protobuf:"varint,5,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
 }
 
-func (x *PageResponse) Reset() {
-	*x = PageResponse{}
+func (x *PageTransfer) Reset() {
+	*x = PageTransfer{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_api_archive_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -148,13 +148,13 @@ func (x *PageResponse) Reset() {
 	}
 }
 
-func (x *PageResponse) String() string {
+func (x *PageTransfer) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PageResponse) ProtoMessage() {}
+func (*PageTransfer) ProtoMessage() {}
 
-func (x *PageResponse) ProtoReflect() protoreflect.Message {
+func (x *PageTransfer) ProtoReflect() protoreflect.Message {
 	mi := &file_api_archive_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -166,40 +166,40 @@ func (x *PageResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PageResponse.ProtoReflect.Descriptor instead.
-func (*PageResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use PageTransfer.ProtoReflect.Descriptor instead.
+func (*PageTransfer) Descriptor() ([]byte, []int) {
 	return file_api_archive_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *PageResponse) GetId() int64 {
+func (x *PageTransfer) GetId() int64 {
 	if x != nil {
 		return x.Id
 	}
 	return 0
 }
 
-func (x *PageResponse) GetFound() bool {
+func (x *PageTransfer) GetFound() bool {
 	if x != nil {
 		return x.Found
 	}
 	return false
 }
 
-func (x *PageResponse) GetChunkSize() int64 {
+func (x *PageTransfer) GetChunkSize() int64 {
 	if x != nil {
 		return x.ChunkSize
 	}
 	return 0
 }
 
-func (x *PageResponse) GetChunkNum() int64 {
+func (x *PageTransfer) GetChunkNum() int64 {
 	if x != nil {
 		return x.ChunkNum
 	}
 	return 0
 }
 
-func (x *PageResponse) GetTotalSize() int64 {
+func (x *PageTransfer) GetTotalSize() int64 {
 	if x != nil {
 		return x.TotalSize
 	}
@@ -279,7 +279,7 @@ var file_api_archive_proto_rawDesc = []byte{
 	0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x22,
 	0x1d, 0x0a, 0x0b, 0x50, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e,
 	0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x22, 0x8f,
-	0x01, 0x0a, 0x0c, 0x50, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x01, 0x0a, 0x0c, 0x50, 0x61, 0x67, 0x65, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x12,
 	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x12,
 	0x14, 0x0a, 0x05, 0x66, 0x6f, 0x75, 0x6e, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x05,
 	0x66, 0x6f, 0x75, 0x6e, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x63, 0x68, 0x75, 0x6e, 0x6b, 0x5f, 0x73,
@@ -312,7 +312,7 @@ var file_api_archive_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_api_archive_proto_goTypes = []interface{}{
 	(*Payload)(nil),      // 0: archive.Payload
 	(*PageRequest)(nil),  // 1: archive.PageRequest
-	(*PageResponse)(nil), // 2: archive.PageResponse
+	(*PageTransfer)(nil), // 2: archive.PageTransfer
 	(*PageChunk)(nil),    // 3: archive.PageChunk
 }
 var file_api_archive_proto_depIdxs = []int32{
@@ -354,7 +354,7 @@ func file_api_archive_proto_init() {
 			}
 		}
 		file_api_archive_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PageResponse); i {
+			switch v := v.(*PageTransfer); i {
 			case 0:
 				return &v.state
 			case 1:

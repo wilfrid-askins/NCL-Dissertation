@@ -2,20 +2,20 @@ package netpb
 
 import (
 	"encoding/binary"
-	"github.com/pkg/errors"
 	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
 	"net"
 	"reflect"
 )
 
 var (
- messages = []proto.Message{
-	&PageRequest{},
-	&PageResponse{},
-	&PageChunk{},
-}
+	messages = []proto.Message{
+		&PageRequest{},
+		&PageTransfer{},
+		&PageChunk{},
+	}
 
- messageIDs = make(map[reflect.Type]int)
+	messageIDs = make(map[reflect.Type]int)
 )
 
 func init() {
@@ -48,7 +48,7 @@ func Write(conn net.Conn, msg proto.Message) error {
 	return nil
 }
 
-func wrap(msg proto.Message) (Payload, error){
+func wrap(msg proto.Message) (Payload, error) {
 	typeID, pres := messageIDs[reflect.TypeOf(msg)]
 	if !pres {
 		return Payload{}, errors.New("unknown message type")
@@ -59,8 +59,8 @@ func wrap(msg proto.Message) (Payload, error){
 		return Payload{}, errors.Wrap(err, "marshalling proto")
 	}
 	return Payload{
-		Type:          int64(typeID),
-		Data:          msgData,
+		Type: int64(typeID),
+		Data: msgData,
 	}, nil
 }
 
@@ -79,10 +79,10 @@ func valueCopy(msg proto.Message) proto.Message {
 
 type (
 	Subscriber func(interface{})
-	Emitter struct {
+	Emitter    struct {
 		subs []Subscriber
 	}
-	)
+)
 
 func NewEmitter() *Emitter {
 	return &Emitter{

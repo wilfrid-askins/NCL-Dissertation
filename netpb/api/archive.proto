@@ -13,7 +13,7 @@ message PageRequest {
   int64 id = 1;
 }
 
-message PageResponse {
+message PageTransfer {
   int64 id = 1;
   bool found = 2;
   int64 chunk_size = 3;

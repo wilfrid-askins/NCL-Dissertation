@@ -1,0 +1,13 @@
+{
+  "database": {
+    "driver": "mysql",
+    "address": "localhost",
+    "port": 3306,
+    "name": "dev",
+    "username": "dev",
+    "password": "dev"
+  },
+  "http-server": {
+    "port": 25565
+  }
+}

@@ -2,19 +2,21 @@ package internal
 
 import (
 	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
 	"go.uber.org/zap"
-	"wilfrid.me/archive-central/internal/peers"
+	"time"
+	"wilfrid.me/archive-central/internal/peer"
 	"wilfrid.me/archive-central/internal/record"
 	"wilfrid.me/archive-central/internal/web"
 )
 
 type Resolver struct {
-	db *sql.DB
-	group *peers.Group
-	server *web.Server
+	db      *sql.DB
+	group   *peer.Group
+	server  *web.Server
 	records *record.Repository
-	logger *zap.SugaredLogger
-	config Config
+	logger  *zap.SugaredLogger
+	config  Config
 }
 
 func NewResolver(config Config) *Resolver {
@@ -28,19 +30,22 @@ func (re *Resolver) Database() *sql.DB {
 		return re.db
 	}
 	// connect to database
-	conn, err := sql.Open("mymysql", re.config.Database)
+	conn, err := sql.Open("mysql", re.config.Database.DatasourceAddress())
 	if err != nil {
 		re.Logger().Fatalw("connecting to db", "err", err)
 	}
 	re.db = conn
+	re.db.SetConnMaxLifetime(time.Minute * 3)
+	re.db.SetMaxOpenConns(10)
+	re.db.SetMaxIdleConns(10)
 	return re.db
 }
 
-func (re *Resolver) Group() *peers.Group {
+func (re *Resolver) Group() *peer.Group {
 	if re.group != nil {
 		return re.group
 	}
-	re.group = peers.NewGroup()
+	re.group = peer.NewGroup(re.Records(), re.Logger())
 	return re.group
 }
 
