@@ -8,10 +8,9 @@ import (
 
 type (
 	Config struct {
-		Database      Database   `json:"database"`
-		Server        HTTPServer `json:"http-server"`
-		Cache         Cache      `json:"cache"`
-		DeveloperMode bool       `json:"developer-mode"`
+		Database Database   `json:"database"`
+		Server   HTTPServer `json:"http-server"`
+		Cache    Cache      `json:"cache"`
 	}
 
 	Database struct {

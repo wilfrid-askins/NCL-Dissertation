@@ -73,11 +73,7 @@ func (re *Resolver) WebServer() *web.Server {
 	if re.server != nil {
 		return re.server
 	}
-	records := re.Records()
-	if !re.config.DeveloperMode {
-		records = nil
-	}
-	server, err := web.NewServer(re.Group(), records, re.Logger())
+	server, err := web.NewServer(re.Group(), re.Logger())
 	if err != nil {
 		re.Logger().Fatalw("creating web server", "err", err)
 	}

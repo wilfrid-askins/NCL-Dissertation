@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi"
 	"github.com/gobuffalo/packr/v2"
@@ -10,18 +9,12 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	"strconv"
-	"wilfrid.me/netpb/pkg/archive"
 )
 
 type (
 	PageProvider interface {
 		Get(context.Context, int) ([]byte, error)
 		Store(context.Context, int, string) (int, error)
-	}
-
-	DeveloperProvider interface {
-		GetLast(context.Context, int) ([]archive.Snapshot, error)
-		GetPeers(context.Context) ([]archive.Peer, error)
 	}
 
 	Server struct {
@@ -32,7 +25,7 @@ type (
 	}
 )
 
-func NewServer(pages PageProvider, developer DeveloperProvider, logger *zap.SugaredLogger) (*Server, error) {
+func NewServer(pages PageProvider, logger *zap.SugaredLogger) (*Server, error) {
 	htmlPages := packr.New("HTML Box", "./html")
 	storeForm, err := htmlPages.FindString("store.html")
 	if err != nil {
@@ -44,7 +37,6 @@ func NewServer(pages PageProvider, developer DeveloperProvider, logger *zap.Suga
 	}
 	return &Server{
 		pages:        pages,
-		developer:    developer,
 		storeForm:    []byte(storeForm),
 		registerForm: []byte(registerForm),
 		logger:       logger,
@@ -96,44 +88,6 @@ func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	if _, err := w.Write(resp); err != nil {
 		s.logger.Errorw("failed to write page data", "msg", err.Error())
-	}
-}
-
-func (s *Server) GetReport(w http.ResponseWriter, r *http.Request) {
-	type Resp struct {
-		Pages []archive.Snapshot `json:"pages"`
-		Peers []archive.Peer     `json:"peers"`
-	}
-	lastNum := r.URL.Query().Get("last")
-	lastInt, err := strconv.Atoi(lastNum)
-	if err != nil {
-		s.logger.Errorw("failed to parse num", "err", err.Error())
-		return
-	}
-
-	snapshots, err := s.developer.GetLast(r.Context(), lastInt)
-	if err != nil {
-		s.logger.Errorw("failed to query database", "err", err.Error())
-		return
-	}
-
-	peers, err := s.developer.GetPeers(r.Context())
-	if err != nil {
-		s.logger.Errorw("failed to query database", "err", err.Error())
-		return
-	}
-
-	resp := Resp{Pages: snapshots, Peers: peers}
-	respData, err := json.Marshal(resp)
-	if err != nil {
-		s.logger.Errorw("failed to marshal response", "err", err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	if _, err := w.Write(respData); err != nil {
-		s.logger.Errorw("failed to write response data", "msg", err.Error())
 	}
 }
 

@@ -3,7 +3,6 @@ package record
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"github.com/gobuffalo/packr/v2"
 	"github.com/pkg/errors"
 	"time"
@@ -61,43 +60,6 @@ func (re *Repository) Get(ctx context.Context, id int) (archive.Snapshot, error)
 		return archive.Snapshot{}, err
 	}
 	return s, nil
-}
-
-func (re *Repository) GetLast(ctx context.Context, num int) ([]archive.Snapshot, error) {
-	query := fmt.Sprintf("SELECT `id`, `sum`, `url`,`time`,`origin` FROM snapshots ORDER BY `time` DESC LIMIT %d;", num)
-	rows, err := re.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, errors.Wrap(err, "querying rows")
-	}
-	var results []archive.Snapshot
-
-	for rows.Next() {
-		s := archive.Snapshot{}
-		if err := rows.Scan(&s.ID, &s.Sum, &s.URL, &s.Time, &s.Origin); err != nil {
-			return nil, errors.Wrap(err, "scanning row")
-		}
-		results = append(results, s)
-	}
-
-	return results, nil
-}
-
-func (re *Repository) GetPeers(ctx context.Context) ([]archive.Peer, error) {
-	rows, err := re.db.QueryContext(ctx, "SELECT `id`, `address` FROM peers;")
-	if err != nil {
-		return nil, errors.Wrap(err, "querying rows")
-	}
-	var results []archive.Peer
-
-	for rows.Next() {
-		s := archive.Peer{}
-		if err := rows.Scan(&s.ID, &s.Address); err != nil {
-			return nil, errors.Wrap(err, "scanning row")
-		}
-		results = append(results, s)
-	}
-
-	return results, nil
 }
 
 func (re *Repository) GetPeer(ctx context.Context, id int) (archive.Peer, error) {
