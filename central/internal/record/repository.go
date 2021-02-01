@@ -3,6 +3,7 @@ package record
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"github.com/gobuffalo/packr/v2"
 	"github.com/pkg/errors"
 	"time"
@@ -53,8 +54,8 @@ func (re *Repository) create() error {
 	return nil
 }
 
-func (re *Repository) Get(id int) (archive.Snapshot, error) {
-	row := re.db.QueryRow("SELECT `id`, `sum`, `url`,`time`,`origin` FROM snapshots WHERE `id`=?;", id)
+func (re *Repository) Get(ctx context.Context, id int) (archive.Snapshot, error) {
+	row := re.db.QueryRowContext(ctx, "SELECT `id`, `sum`, `url`,`time`,`origin` FROM snapshots WHERE `id`=?;", id)
 	s := archive.Snapshot{}
 	if err := row.Scan(&s.ID, &s.Sum, &s.URL, &s.Time, &s.Origin); err != nil {
 		return archive.Snapshot{}, err
@@ -62,8 +63,45 @@ func (re *Repository) Get(id int) (archive.Snapshot, error) {
 	return s, nil
 }
 
-func (re *Repository) GetPeer(id int) (archive.Peer, error) {
-	row := re.db.QueryRow("SELECT `id`, `address` FROM peers WHERE `id`=?;", id)
+func (re *Repository) GetLast(ctx context.Context, num int) ([]archive.Snapshot, error) {
+	query := fmt.Sprintf("SELECT `id`, `sum`, `url`,`time`,`origin` FROM snapshots ORDER BY `time` DESC LIMIT %d;", num)
+	rows, err := re.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, errors.Wrap(err, "querying rows")
+	}
+	var results []archive.Snapshot
+
+	for rows.Next() {
+		s := archive.Snapshot{}
+		if err := rows.Scan(&s.ID, &s.Sum, &s.URL, &s.Time, &s.Origin); err != nil {
+			return nil, errors.Wrap(err, "scanning row")
+		}
+		results = append(results, s)
+	}
+
+	return results, nil
+}
+
+func (re *Repository) GetPeers(ctx context.Context) ([]archive.Peer, error) {
+	rows, err := re.db.QueryContext(ctx, "SELECT `id`, `address` FROM peers;")
+	if err != nil {
+		return nil, errors.Wrap(err, "querying rows")
+	}
+	var results []archive.Peer
+
+	for rows.Next() {
+		s := archive.Peer{}
+		if err := rows.Scan(&s.ID, &s.Address); err != nil {
+			return nil, errors.Wrap(err, "scanning row")
+		}
+		results = append(results, s)
+	}
+
+	return results, nil
+}
+
+func (re *Repository) GetPeer(ctx context.Context, id int) (archive.Peer, error) {
+	row := re.db.QueryRowContext(ctx, "SELECT `id`, `address` FROM peers WHERE `id`=?;", id)
 	s := archive.Peer{}
 	if err := row.Scan(&s.ID, &s.Address); err != nil {
 		return archive.Peer{}, err
@@ -71,8 +109,8 @@ func (re *Repository) GetPeer(id int) (archive.Peer, error) {
 	return s, nil
 }
 
-func (re *Repository) Add(r archive.Snapshot) (int64, error) {
-	res, err := re.db.Exec("INSERT INTO snapshots(`sum`,`url`,`time`,`origin`) VALUES (?,?,?,?);", r.Sum, r.URL, r.Time, r.Origin)
+func (re *Repository) Add(ctx context.Context, r archive.Snapshot) (int64, error) {
+	res, err := re.db.ExecContext(ctx, "INSERT INTO snapshots(`sum`,`url`,`time`,`origin`) VALUES (?,?,?,?);", r.Sum, r.URL, r.Time, r.Origin)
 	if err != nil {
 		return 0, err
 	}

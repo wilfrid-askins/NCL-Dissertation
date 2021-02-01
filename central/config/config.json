@@ -9,5 +9,12 @@
   },
   "http-server": {
     "port": 25565
-  }
+  },
+  "cache": {
+    "address": "localhost:6379",
+    "username": "",
+    "password": "password123",
+    "database": 0
+  },
+  "developer-mode": true
 }

@@ -6,6 +6,7 @@ replace wilfrid.me/netpb v0.0.0 => ../netpb/
 
 require (
 	github.com/go-chi/chi v4.1.2+incompatible
+	github.com/go-redis/redis/v8 v8.4.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gobuffalo/envy v1.9.0 // indirect
 	github.com/gobuffalo/packr v1.30.1 // indirect

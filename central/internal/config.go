@@ -8,12 +8,10 @@ import (
 
 type (
 	Config struct {
-		Database Database `json:"database"`
-		Server   Server   `json:"http-server"`
-	}
-
-	Server struct {
-		Port int `json:"port"`
+		Database      Database   `json:"database"`
+		Server        HTTPServer `json:"http-server"`
+		Cache         Cache      `json:"cache"`
+		DeveloperMode bool       `json:"developer-mode"`
 	}
 
 	Database struct {
@@ -23,6 +21,17 @@ type (
 		Name     string `json:"name"`
 		Username string `json:"username"`
 		Password string `json:"password"`
+	}
+
+	HTTPServer struct {
+		Port int `json:"port"`
+	}
+
+	Cache struct {
+		Address  string `json:"address"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Database int    `json:"database"`
 	}
 )
 

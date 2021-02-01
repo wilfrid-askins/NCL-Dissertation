@@ -2,6 +2,7 @@ package internal
 
 import (
 	"database/sql"
+	"github.com/go-redis/redis/v8"
 	_ "github.com/go-sql-driver/mysql"
 	"go.uber.org/zap"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 type Resolver struct {
 	db      *sql.DB
+	cache   *redis.Client
 	group   *peer.Group
 	server  *web.Server
 	records *record.Repository
@@ -41,11 +43,29 @@ func (re *Resolver) Database() *sql.DB {
 	return re.db
 }
 
+func (re *Resolver) Cache() *redis.Client {
+	if re.cache != nil {
+		return re.cache
+	}
+	re.cache = redis.NewClient(&redis.Options{
+		Addr:         re.config.Cache.Address,
+		Username:     re.config.Cache.Username,
+		Password:     re.config.Cache.Password,
+		DB:           re.config.Cache.Database,
+		MaxRetries:   3,
+		DialTimeout:  time.Second * 10,
+		ReadTimeout:  time.Second * 5,
+		WriteTimeout: time.Second * 5,
+		MinIdleConns: 10,
+	})
+	return re.cache
+}
+
 func (re *Resolver) Group() *peer.Group {
 	if re.group != nil {
 		return re.group
 	}
-	re.group = peer.NewGroup(re.Records(), re.Logger())
+	re.group = peer.NewGroup(re.Records(), re.Cache(), re.Logger())
 	return re.group
 }
 
@@ -53,7 +73,15 @@ func (re *Resolver) WebServer() *web.Server {
 	if re.server != nil {
 		return re.server
 	}
-	re.server = web.NewServer(re.Group(), re.Logger())
+	records := re.Records()
+	if !re.config.DeveloperMode {
+		records = nil
+	}
+	server, err := web.NewServer(re.Group(), records, re.Logger())
+	if err != nil {
+		re.Logger().Fatalw("creating web server", "err", err)
+	}
+	re.server = server
 	return re.server
 }
 

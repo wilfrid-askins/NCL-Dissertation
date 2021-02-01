@@ -1,6 +1,12 @@
 package peer
 
 import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"crypto/sha512"
+	"fmt"
+	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io/ioutil"
@@ -11,39 +17,62 @@ import (
 	"wilfrid.me/netpb/pkg/netpb"
 )
 
+const cacheTime = time.Hour
+
 type (
 	Group struct {
 		records   *record.Repository
+		cache     *redis.Client
 		logger    *zap.SugaredLogger
 		transfers *netpb.Transfer
 	}
 )
 
-func NewGroup(records *record.Repository, logger *zap.SugaredLogger) *Group {
+func NewGroup(records *record.Repository, cache *redis.Client, logger *zap.SugaredLogger) *Group {
 	return &Group{
 		records:   records,
+		cache:     cache,
 		logger:    logger,
 		transfers: netpb.NewTransfer(logger),
 	}
 }
 
-func (gr *Group) Get(id int) ([]byte, error) {
-	snap, err := gr.records.Get(id)
+func (gr *Group) Get(ctx context.Context, id int) ([]byte, error) {
+	// check cache
+	key := fmt.Sprintf("snapshot-%d", id)
+	cached, err := gr.cache.Get(ctx, key).Bytes()
+	if err != nil && err != redis.Nil {
+		gr.logger.Errorw("failed to query cache", "msg", err.Error())
+	}
+	if cached != nil {
+		return cached, nil
+	}
+
+	// find peer
+	snap, err := gr.records.Get(ctx, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting snapshot record")
 	}
 
-	return gr.GetFromPeer(id, snap.Origin)
+	data, err := gr.GetFromPeer(id, snap.Origin)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting from peer")
+	}
+
 	// TODO try mirrors if not found
+
+	if err := gr.cache.Set(ctx, key, data, cacheTime).Err(); err != nil {
+		gr.logger.Errorw("failed to set cache", "msg", err.Error())
+	}
+
+	return data, nil
 }
 
-func (gr *Group) Store(peerID int, url string) error {
-	// determine peer
-	// download web page
-	// send page transfer
-	peer, err := gr.records.GetPeer(peerID)
+func (gr *Group) Store(ctx context.Context, peerID int, url string) (int, error) {
+	// find peer to store in
+	peer, err := gr.records.GetPeer(ctx, peerID)
 	if err != nil {
-		return errors.Wrap(err, "getting peer record")
+		return 0, errors.Wrap(err, "getting peer record")
 	}
 
 	// download url to memory
@@ -52,18 +81,40 @@ func (gr *Group) Store(peerID int, url string) error {
 	// get id of record
 	resp, err := http.Get(url)
 	if err != nil {
-		return errors.Wrap(err, "downloading url")
+		return 0, errors.Wrap(err, "downloading url")
 	}
-	data, err := ioutil.ReadAll(resp.Body)
+	pageData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "reading url data")
+		return 0, errors.Wrap(err, "reading url data")
 	}
-	recID, err := gr.records.Add(archive.Snapshot{
-		Sum:    "abc123",
+
+	// compress page data
+	var comp bytes.Buffer
+	zw := gzip.NewWriter(&comp)
+	if _, err := zw.Write(pageData); err != nil {
+		return 0, errors.Wrap(err, "compressing page data")
+	}
+	if err := zw.Close(); err != nil {
+		return 0, errors.Wrap(err, "closing compression writer")
+	}
+	data := comp.Bytes()
+
+	// calculate hash of page data
+	hash := sha512.New512_256()
+	if _, err := hash.Write(data); err != nil {
+		return 0, errors.Wrap(err, "writing hash")
+	}
+	checkSum := fmt.Sprintf("%x", hash.Sum(nil))
+
+	recID, err := gr.records.Add(ctx, archive.Snapshot{
+		Sum:    checkSum,
 		URL:    url,
 		Time:   time.Now(),
 		Origin: peer.Address,
 	})
+	if err != nil {
+		return 0, errors.Wrap(err, "creating new page record")
+	}
 
 	cl := netpb.NewClient(peer.Address, gr.logger)
 
@@ -76,23 +127,24 @@ func (gr *Group) Store(peerID int, url string) error {
 	for !cl.Connected {
 	}
 
+	// tell peer to store this page
 	if err := cl.Send(&netpb.PageTransfer{
 		Id:        recID,
-		ChunkSize: len(data),
+		ChunkSize: int64(len(data)),
 		ChunkNum:  1,
-		TotalSize: len(data),
+		TotalSize: int64(len(data)),
 	}); err != nil {
-		return errors.Wrap(err, "page transfer msg")
+		return 0, errors.Wrap(err, "page transfer msg")
 	}
 	if err := cl.Send(&netpb.PageChunk{
 		Id:    recID,
 		Chunk: 0,
 		Data:  data,
 	}); err != nil {
-		return errors.Wrap(err, "page chunk msg")
+		return 0, errors.Wrap(err, "page chunk msg")
 	}
 
-	return nil
+	return int(recID), nil
 }
 
 func (gr *Group) GetFromPeer(id int, address string) ([]byte, error) {
@@ -109,7 +161,7 @@ func (gr *Group) GetFromPeer(id int, address string) ([]byte, error) {
 	for !cl.Connected {
 	}
 
-	cl.Events.Subscribe(1, func(i interface{}) {
+	cl.Events.On(netpb.ID(&netpb.PageTransfer{}), func(i interface{}) {
 		p := i.(netpb.PacketEvent)
 		req := p.Message.(*netpb.PageTransfer)
 		if !req.Found {
@@ -119,7 +171,7 @@ func (gr *Group) GetFromPeer(id int, address string) ([]byte, error) {
 		gr.transfers.New(req)
 	})
 
-	cl.Events.Subscribe(2, func(i interface{}) {
+	cl.Events.On(netpb.ID(&netpb.PageChunk{}), func(i interface{}) {
 		p := i.(netpb.PacketEvent)
 		chunk := p.Message.(*netpb.PageChunk)
 		done, result = gr.transfers.Push(chunk)
@@ -133,6 +185,8 @@ func (gr *Group) GetFromPeer(id int, address string) ([]byte, error) {
 
 	for !done {
 	}
+
+	// TODO test checksum here
 
 	return result, nil
 }
