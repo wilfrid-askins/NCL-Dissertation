@@ -44,7 +44,7 @@ func (gr *Group) Get(ctx context.Context, id int) ([]byte, error) {
 	if err != nil && err != redis.Nil {
 		gr.logger.Errorw("failed to query cache", "msg", err.Error())
 	}
-	if cached != nil {
+	if err != redis.Nil {
 		return cached, nil
 	}
 
@@ -76,9 +76,6 @@ func (gr *Group) Store(ctx context.Context, peerID int, url string) (int, error)
 	}
 
 	// download url to memory
-	// get checksum of bytes
-	// store record in db
-	// get id of record
 	resp, err := http.Get(url)
 	if err != nil {
 		return 0, errors.Wrap(err, "downloading url")
@@ -106,6 +103,7 @@ func (gr *Group) Store(ctx context.Context, peerID int, url string) (int, error)
 	}
 	checkSum := fmt.Sprintf("%x", hash.Sum(nil))
 
+	// add page record
 	recID, err := gr.records.Add(ctx, archive.Snapshot{
 		Sum:    checkSum,
 		URL:    url,

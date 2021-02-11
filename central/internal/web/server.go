@@ -57,12 +57,14 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		s.logger.Errorw("failed to get page", "msg", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	page, err := s.pages.Get(r.Context(), id)
 	if err != nil {
 		s.logger.Errorw("failed to get page", "msg", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -75,11 +77,18 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Query().Get("url")
-	peerID := 1 // TODO: set peer id
+	peer := r.URL.Query().Get("peer")
+	peerID, err := strconv.Atoi(peer)
+	if err != nil {
+		s.logger.Errorw("failed to parse peerID", "msg", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	recID, err := s.pages.Store(r.Context(), peerID, url)
 	if err != nil {
 		s.logger.Errorw("failed to store page", "msg", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	resp := []byte(fmt.Sprintf("%d", recID))

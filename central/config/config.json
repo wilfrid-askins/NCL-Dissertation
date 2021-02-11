@@ -13,7 +13,7 @@
   "cache": {
     "address": "localhost:6379",
     "username": "",
-    "password": "password123",
+    "password": "",
     "database": 0
   }
 }

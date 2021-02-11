@@ -21,10 +21,8 @@ services:
       - "8500:8500"
   redis:
     image: redis:latest
-    volumes:
-      - redis_data:/bitnami/redis/data
     environment:
-      - REDIS_PASSWORD=password123
+      - ALLOW_EMPTY_PASSWORD=yes
     ports:
       - "6379:6379"
 
@@ -32,6 +30,4 @@ volumes:
   db_data:
     external: false
   consul_data:
-    external: false
-  redis_data:
     external: false
