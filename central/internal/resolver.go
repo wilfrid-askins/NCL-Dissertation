@@ -14,9 +14,9 @@ import (
 type Resolver struct {
 	db      *sql.DB
 	cache   *redis.Client
-	group   *peer.Group
+	group   peer.Group
 	server  *web.Server
-	records *record.Repository
+	records record.Repository
 	logger  *zap.SugaredLogger
 	config  Config
 }
@@ -61,11 +61,11 @@ func (re *Resolver) Cache() *redis.Client {
 	return re.cache
 }
 
-func (re *Resolver) Group() *peer.Group {
+func (re *Resolver) Group() peer.Group {
 	if re.group != nil {
 		return re.group
 	}
-	re.group = peer.NewGroup(re.Records(), re.Cache(), re.Logger())
+	re.group = peer.NewNetwork(re.Records(), re.Cache(), re.Logger())
 	return re.group
 }
 
@@ -81,11 +81,11 @@ func (re *Resolver) WebServer() *web.Server {
 	return re.server
 }
 
-func (re *Resolver) Records() *record.Repository {
+func (re *Resolver) Records() record.Repository {
 	if re.records != nil {
 		return re.records
 	}
-	records, err := record.NewRepository(re.Database())
+	records, err := record.NewDatabase(re.Database())
 	if err != nil {
 		re.Logger().Fatalw("creating records repository", "err", err)
 	}

@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"fmt"
 	"github.com/go-chi/chi"
 	"github.com/gobuffalo/packr/v2"
@@ -9,23 +8,17 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	"strconv"
+	"wilfrid.me/archive-central/internal/peer"
 )
 
-type (
-	PageProvider interface {
-		Get(context.Context, int) ([]byte, error)
-		Store(context.Context, int, string) (int, error)
-	}
+type Server struct {
+	group        peer.Group
+	storeForm    []byte
+	registerForm []byte
+	logger       *zap.SugaredLogger
+}
 
-	Server struct {
-		pages        PageProvider
-		storeForm    []byte
-		registerForm []byte
-		logger       *zap.SugaredLogger
-	}
-)
-
-func NewServer(pages PageProvider, logger *zap.SugaredLogger) (*Server, error) {
+func NewServer(group peer.Group, logger *zap.SugaredLogger) (*Server, error) {
 	htmlPages := packr.New("HTML Box", "./html")
 	storeForm, err := htmlPages.FindString("store.html")
 	if err != nil {
@@ -36,7 +29,7 @@ func NewServer(pages PageProvider, logger *zap.SugaredLogger) (*Server, error) {
 		return nil, errors.Wrap(err, "loading register page")
 	}
 	return &Server{
-		pages:        pages,
+		group:        group,
 		storeForm:    []byte(storeForm),
 		registerForm: []byte(registerForm),
 		logger:       logger,
@@ -61,7 +54,7 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page, err := s.pages.Get(r.Context(), id)
+	page, err := s.group.Get(r.Context(), id)
 	if err != nil {
 		s.logger.Errorw("failed to get page", "msg", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -85,7 +78,7 @@ func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recID, err := s.pages.Store(r.Context(), peerID, url)
+	recID, err := s.group.Store(r.Context(), peerID, url)
 	if err != nil {
 		s.logger.Errorw("failed to store page", "msg", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
