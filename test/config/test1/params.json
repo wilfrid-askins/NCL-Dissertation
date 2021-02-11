@@ -1,0 +1,6 @@
+{
+  "name": "Basic Test",
+  "target": "http://localhost:25565/api/page/12",
+  "request-number": 100,
+  "duration": "30s"
+}
