@@ -3,17 +3,18 @@ package internal
 import (
 	"go.uber.org/zap"
 	"wilfrid.me/archive-child/internal/file"
+	"wilfrid.me/archive-child/pkg/child"
 	"wilfrid.me/netpb/pkg/netpb"
 )
 
 type Resolver struct {
-	files *file.Repository
+	files    *file.Repository
 	listener *netpb.Listener
-	logger *zap.SugaredLogger
-	config Config
+	logger   *zap.SugaredLogger
+	config   child.Config
 }
 
-func NewResolver(config Config) *Resolver {
+func NewResolver(config child.Config) *Resolver {
 	return &Resolver{
 		config: config,
 	}
@@ -24,7 +25,7 @@ func (re *Resolver) Files() *file.Repository {
 		return re.files
 	}
 
-	files, err := file.NewRepository()
+	files, err := file.NewRepository(re.config.StorePath)
 	if err != nil {
 		re.Logger().Fatalw("failed to create file repo", "msg", err.Error())
 	}
@@ -37,7 +38,7 @@ func (re *Resolver) Listener() *netpb.Listener {
 	if re.listener != nil {
 		return re.listener
 	}
-	re.listener = netpb.NewListener(re.Logger())
+	re.listener = netpb.NewListener(re.config.Port, re.Logger())
 	return re.listener
 }
 

@@ -1,17 +1,22 @@
 package main
 
 import (
-	"wilfrid.me/archive-child/internal"
-	"wilfrid.me/archive-child/internal/peer"
+	"os"
+	"wilfrid.me/archive-child/pkg/child"
 )
 
 func main() {
-	config := internal.LoadConfig()
-	resolver := internal.NewResolver(config)
+	path, err := os.Getwd()
+	if err != nil {
+		panic(err.Error())
+	}
 
-	_ = peer.Subscribe(resolver.Listener().Events, resolver.Files(), resolver.Logger())
-
-	if err := resolver.Listener().Listen(); err != nil {
-		resolver.Logger().Fatalw("starting listening", "msg", err.Error())
+	config := child.Config{
+		Port:      25565,
+		StorePath: path + "/store",
+	}
+	listener := child.NewListener(config)
+	if err := listener.Listen(); err != nil {
+		panic(err.Error())
 	}
 }
