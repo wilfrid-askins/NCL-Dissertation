@@ -24,6 +24,10 @@ func init() {
 	}
 }
 
+func ID(msg proto.Message) int {
+	return messageIDs[reflect.TypeOf(msg)]
+}
+
 func Write(conn net.Conn, msg proto.Message) error {
 	wrapper, err := wrap(msg)
 	if err != nil {
@@ -90,7 +94,7 @@ func NewEmitter() *Emitter {
 	}
 }
 
-func (e *Emitter) Subscribe(id int, sub Subscriber) {
+func (e *Emitter) On(id int, sub Subscriber) {
 	e.subs[id] = sub
 }
 
