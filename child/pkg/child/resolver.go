@@ -1,9 +1,8 @@
-package internal
+package child
 
 import (
 	"go.uber.org/zap"
-	"wilfrid.me/archive-child/internal/file"
-	"wilfrid.me/archive-child/pkg/child"
+	"wilfrid.me/archive-child/pkg/child/file"
 	"wilfrid.me/netpb/pkg/netpb"
 )
 
@@ -11,10 +10,10 @@ type Resolver struct {
 	files    *file.Repository
 	listener *netpb.Listener
 	logger   *zap.SugaredLogger
-	config   child.Config
+	config   Config
 }
 
-func NewResolver(config child.Config) *Resolver {
+func NewResolver(config Config) *Resolver {
 	return &Resolver{
 		config: config,
 	}

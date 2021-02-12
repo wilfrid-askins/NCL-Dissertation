@@ -12,7 +12,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"time"
-	"wilfrid.me/archive-central/internal/record"
+	"wilfrid.me/archive-central/pkg/central/record"
 	"wilfrid.me/netpb/pkg/archive"
 	"wilfrid.me/netpb/pkg/netpb"
 )

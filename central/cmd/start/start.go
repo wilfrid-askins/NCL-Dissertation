@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"wilfrid.me/archive-central/internal"
+	"wilfrid.me/archive-central/pkg/central"
 )
 
 func main() {
-	config := internal.LoadConfig()
-	resolver := internal.NewResolver(config)
+	config := central.LoadConfig()
+	resolver := central.NewResolver(config)
 
 	ws := resolver.WebServer()
 	port := fmt.Sprintf(":%d", config.Server.Port)

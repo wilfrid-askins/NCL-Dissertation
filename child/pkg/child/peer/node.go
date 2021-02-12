@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"go.uber.org/zap"
-	"wilfrid.me/archive-child/internal/file"
+	"wilfrid.me/archive-child/pkg/child/file"
 	"wilfrid.me/netpb/pkg/netpb"
 )
 

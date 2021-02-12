@@ -3,22 +3,21 @@ package record
 import (
 	"context"
 	"database/sql"
-	"github.com/gobuffalo/packr/v2"
+	"embed"
 	"github.com/pkg/errors"
 	"time"
 	"wilfrid.me/netpb/pkg/archive"
 )
 
+//go:embed tables/*
+var files embed.FS
+
 type Database struct {
-	db    *sql.DB
-	files *packr.Box
+	db *sql.DB
 }
 
 func NewDatabase(db *sql.DB) (*Database, error) {
-	re := &Database{
-		db:    db,
-		files: packr.New("Config Box", "./config"),
-	}
+	re := &Database{db: db}
 	if err := re.create(); err != nil {
 		return nil, err
 	}
@@ -28,7 +27,7 @@ func NewDatabase(db *sql.DB) (*Database, error) {
 func (db *Database) create() error {
 	ctx, cfn := context.WithTimeout(context.Background(), time.Second*10)
 	defer cfn()
-	snapshots, err := db.files.FindString("snapshots.sql")
+	snapshots, err := files.Open("snapshots.sql")
 	if err != nil {
 		return errors.Wrap(err, "finding snapshots table file")
 	}
@@ -36,7 +35,7 @@ func (db *Database) create() error {
 		return errors.Wrap(err, "executing snapshots table init")
 	}
 
-	peers, err := db.files.FindString("peers.sql")
+	peers, err := files.Open("peers.sql")
 	if err != nil {
 		return errors.Wrap(err, "finding peers table file")
 	}
@@ -56,6 +55,14 @@ func (db *Database) Get(ctx context.Context, id int) (archive.Snapshot, error) {
 	return s, nil
 }
 
+func (db *Database) Add(ctx context.Context, r archive.Snapshot) (int64, error) {
+	res, err := db.db.ExecContext(ctx, "INSERT INTO snapshots(`sum`,`url`,`time`,`origin`) VALUES (?,?,?,?);", r.Sum, r.URL, r.Time, r.Origin)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
 func (db *Database) GetPeer(ctx context.Context, id int) (archive.Peer, error) {
 	row := db.db.QueryRowContext(ctx, "SELECT `id`, `address` FROM peers WHERE `id`=?;", id)
 	s := archive.Peer{}
@@ -65,8 +72,8 @@ func (db *Database) GetPeer(ctx context.Context, id int) (archive.Peer, error) {
 	return s, nil
 }
 
-func (db *Database) Add(ctx context.Context, r archive.Snapshot) (int64, error) {
-	res, err := db.db.ExecContext(ctx, "INSERT INTO snapshots(`sum`,`url`,`time`,`origin`) VALUES (?,?,?,?);", r.Sum, r.URL, r.Time, r.Origin)
+func (db *Database) AddPeer(ctx context.Context, p archive.Peer) (int64, error) {
+	res, err := db.db.ExecContext(ctx, "INSERT INTO peers(`address`) VALUES (?);", p.Address)
 	if err != nil {
 		return 0, err
 	}

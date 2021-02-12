@@ -1,4 +1,4 @@
-package internal
+package central
 
 import (
 	"database/sql"
@@ -6,9 +6,9 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"go.uber.org/zap"
 	"time"
-	"wilfrid.me/archive-central/internal/peer"
-	"wilfrid.me/archive-central/internal/record"
-	"wilfrid.me/archive-central/internal/web"
+	"wilfrid.me/archive-central/pkg/central/peer"
+	"wilfrid.me/archive-central/pkg/central/record"
+	"wilfrid.me/archive-central/pkg/central/web"
 )
 
 type Resolver struct {

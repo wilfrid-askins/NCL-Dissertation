@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	"strconv"
-	"wilfrid.me/archive-central/internal/peer"
+	"wilfrid.me/archive-central/pkg/central/peer"
 )
 
 type Server struct {

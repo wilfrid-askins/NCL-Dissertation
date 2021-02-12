@@ -22,6 +22,16 @@ func (db *FakeDatabase) Get(_ context.Context, id int) (archive.Snapshot, error)
 	return db.Snapshots[idx], nil
 }
 
+func (db *FakeDatabase) Add(_ context.Context, snapshot archive.Snapshot) (int64, error) {
+	var id int64
+	if len(db.Snapshots) > 0 {
+		id = int64(db.Snapshots[len(db.Snapshots)-1].ID + 1)
+	}
+	snapshot.ID = int(id)
+	db.Snapshots = append(db.Snapshots, snapshot)
+	return id, nil
+}
+
 func (db *FakeDatabase) GetPeer(_ context.Context, id int) (archive.Peer, error) {
 	idx := sort.Search(len(db.Peers), func(i int) bool {
 		return db.Peers[i].ID == id
@@ -32,12 +42,8 @@ func (db *FakeDatabase) GetPeer(_ context.Context, id int) (archive.Peer, error)
 	return db.Peers[idx], nil
 }
 
-func (db *FakeDatabase) Add(_ context.Context, snapshot archive.Snapshot) (int64, error) {
-	var id int64
-	if len(db.Snapshots) > 0 {
-		id = int64(db.Snapshots[len(db.Snapshots)-1].ID + 1)
-	}
-	snapshot.ID = int(id)
-	db.Snapshots = append(db.Snapshots, snapshot)
-	return id, nil
+func (db *FakeDatabase) AddPeer(_ context.Context, peer archive.Peer) (int64, error) {
+	peer.ID = len(db.Peers)
+	db.Peers = append(db.Peers, peer)
+	return int64(peer.ID), nil
 }

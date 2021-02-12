@@ -1,6 +1,6 @@
 module wilfrid.me/archive-central
 
-go 1.15
+go 1.16
 
 replace wilfrid.me/netpb v0.0.0 => ../netpb/
 
@@ -9,8 +9,7 @@ require (
 	github.com/go-redis/redis/v8 v8.4.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gobuffalo/envy v1.9.0 // indirect
-	github.com/gobuffalo/packr v1.30.1 // indirect
-	github.com/gobuffalo/packr/v2 v2.8.0
+	github.com/gobuffalo/packr/v2 v2.8.1 // indirect
 	github.com/hashicorp/consul/api v1.7.0
 	github.com/karrick/godirwalk v1.16.1 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
