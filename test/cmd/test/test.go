@@ -2,20 +2,20 @@ package main
 
 import (
 	"bufio"
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/gobuffalo/packr/v2"
-	"github.com/tealeg/xlsx"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+	"wilfrid.me/archive-central/pkg/central"
 	"wilfrid.me/archive-child/pkg/child"
+	"wilfrid.me/netpb/pkg/archive"
 )
 
-const root = "./config"
+const root = "./tests"
 const output = "./output"
 
 var tests = []string{
@@ -28,6 +28,7 @@ type (
 		Target        string `json:"target"`
 		RequestNumber int    `json:"request-number"`
 		Duration      string `json:"duration"`
+		NodeNumber    int    `json:"node-number"`
 	}
 
 	ResultRow struct {
@@ -44,70 +45,114 @@ func main() {
 	testName := pickTest()
 	box := packr.New(testName, root+"/"+testName)
 
-	// create new setup in docker?
-	// create image using fake child nodes
-	// virtual passing between bytes
-	// store phase
-	// query phase
-	node := child.NewListener(child.Config{
-		Port:      25566,
-		StorePath: "./store-123",
-	})
-
-	// load parameters
-	params := Params{}
-	paramsData, err := box.Find("params.json")
-	if err := json.Unmarshal(paramsData, &params); err != nil {
-		panic(err)
-	}
-
-	// create sheet
-	f := xlsx.NewFile()
-	sheet, err := f.AddSheet(params.Name)
+	peers := createPeers()
+	// load config and create resolver
+	// move this later
+	config := central.Config{}
+	configData, err := box.Find("central.json")
 	if err != nil {
-		panic(err)
+		panic(err.Error())
 	}
-
-	// calculate delays
-	duration, err := time.ParseDuration(params.Duration)
-	if err != nil {
-		panic(err)
+	if err := json.Unmarshal(configData, &config); err != nil {
+		panic(err.Error())
 	}
-	perRequest := duration / time.Duration(params.RequestNumber)
-
-	// run http requests at ip address
-	// record responses
-	start := time.Now()
-	for i := 0; i < params.RequestNumber; i++ {
-		rowVal := ResultRow{}
-		resp, err := http.Get(params.Target)
-		rowVal.ReqTime = time.Now().Sub(start).Seconds()
-		rowVal.ReqFailed = err != nil
+	resolver := central.NewResolver(config)
+	ws := resolver.WebServer()
+	port := fmt.Sprintf(":%d", config.Server.Port)
+	go func() {
+		if err := http.ListenAndServe(port, ws.GetRouter()); err != nil {
+			fmt.Println(err.Error())
+		}
+	}()
+	// add peers to database
+	for _, p := range peers {
+		_, err := resolver.Records().AddPeer(context.Background(), p)
 		if err != nil {
-			rowVal.ReqError = err.Error()
-			continue
+			fmt.Println(err.Error())
+		}
+	}
+
+	/*
+		// load parameters
+		params := Params{}
+		paramsData, err := box.Find("params.json")
+		if err := json.Unmarshal(paramsData, &params); err != nil {
+			panic(err)
 		}
 
-		rowVal.StatusCode = resp.StatusCode
-		data, err := ioutil.ReadAll(resp.Body)
+		// create sheet
+		f := xlsx.NewFile()
+		sheet, err := f.AddSheet(params.Name)
 		if err != nil {
-			rowVal.ReadError = err.Error()
-			continue
+			panic(err)
 		}
-		rowVal.DataSize = len(data)
 
-		row := sheet.AddRow()
-		row.WriteStruct(&rowVal, -1)
-		time.Sleep(perRequest)
-	}
+		// calculate delays
+		duration, err := time.ParseDuration(params.Duration)
+		if err != nil {
+			panic(err)
+		}
+		perRequest := duration / time.Duration(params.RequestNumber)
 
-	// write sheet to file
-	var data bytes.Buffer
-	writer := bufio.NewWriter(&data)
-	if err := f.Write(writer); err != nil {
-		panic(err)
+		// run http requests at ip address
+		// record responses
+		start := time.Now()
+		for i := 0; i < params.RequestNumber; i++ {
+			rowVal := ResultRow{}
+			resp, err := http.Get(params.Target)
+			rowVal.ReqTime = time.Now().Sub(start).Seconds()
+			rowVal.ReqFailed = err != nil
+			if err != nil {
+				rowVal.ReqError = err.Error()
+				continue
+			}
+
+			rowVal.StatusCode = resp.StatusCode
+			data, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				rowVal.ReadError = err.Error()
+				continue
+			}
+			rowVal.DataSize = len(data)
+
+			row := sheet.AddRow()
+			row.WriteStruct(&rowVal, -1)
+			time.Sleep(perRequest)
+		}
+
+		// write sheet to file
+		var data bytes.Buffer
+		writer := bufio.NewWriter(&data)
+		if err := f.Write(writer); err != nil {
+			panic(err)
+		}
+		writeResult(testName, data.Bytes())
+	*/
+}
+
+func createPeers() []archive.Peer {
+	storePath := "./store"
+	portStart := 25566
+	// portEnd := 30000
+	nodeNum := 500
+	var peers []archive.Peer
+
+	for i := portStart; i < portStart+nodeNum; i++ {
+		node := child.NewListener(child.Config{
+			Port:      i,
+			StorePath: fmt.Sprintf("%s/%d", storePath, i),
+		})
+		peers = append(peers, archive.Peer{
+			ID:      i,
+			Address: fmt.Sprintf("localhost:%d", i),
+		})
+		go func(port int) {
+			if err := node.Listen(); err != nil {
+				fmt.Printf("failed to listen on port %d, %s", port, err.Error())
+			}
+		}(i)
 	}
-	writeResult(testName, data.Bytes())
+	return peers
 }
 
 func writeResult(testName string, data []byte) {
