@@ -1,3 +1,4 @@
 .DS_Store
 .idea
-
+/central/volumes
+/test/store
