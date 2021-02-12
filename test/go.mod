@@ -1,6 +1,6 @@
 module wilfrid.me/archive-test
 
-go 1.15
+go 1.16
 
 replace wilfrid.me/archive-central v0.0.0 => ../central/
 

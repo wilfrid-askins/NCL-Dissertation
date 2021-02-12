@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"github.com/gobuffalo/packr/v2"
@@ -42,10 +43,13 @@ type (
 )
 
 func main() {
+	ctx, cfn := context.WithTimeout(context.Background(), time.Minute*10)
+	defer cfn()
+
 	testName := pickTest()
+	peers := createPeers()
 	box := packr.New(testName, root+"/"+testName)
 
-	peers := createPeers()
 	// load config and create resolver
 	// move this later
 	config := central.Config{}
@@ -64,9 +68,18 @@ func main() {
 			fmt.Println(err.Error())
 		}
 	}()
+	// clear old peers and snapshots
+	_, err = resolver.Database().ExecContext(ctx, "TRUNCATE TABLE snapshots;")
+	if err != nil {
+		panic(err.Error())
+	}
+	_, err = resolver.Database().ExecContext(ctx, "TRUNCATE TABLE peers;")
+	if err != nil {
+		panic(err.Error())
+	}
 	// add peers to database
 	for _, p := range peers {
-		_, err := resolver.Records().AddPeer(context.Background(), p)
+		_, err := resolver.Records().AddPeer(ctx, p)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
@@ -134,7 +147,7 @@ func createPeers() []archive.Peer {
 	storePath := "./store"
 	portStart := 25566
 	// portEnd := 30000
-	nodeNum := 500
+	nodeNum := 20
 	var peers []archive.Peer
 
 	for i := portStart; i < portStart+nodeNum; i++ {
