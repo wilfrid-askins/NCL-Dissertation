@@ -73,11 +73,7 @@ func (re *Resolver) WebServer() *web.Server {
 	if re.server != nil {
 		return re.server
 	}
-	server, err := web.NewServer(re.Group(), re.Logger())
-	if err != nil {
-		re.Logger().Fatalw("creating web server", "err", err)
-	}
-	re.server = server
+	re.server = web.NewServer(re.Group(), re.Logger())
 	return re.server
 }
 

@@ -1,47 +1,39 @@
 package web
 
 import (
+	_ "embed"
 	"fmt"
 	"github.com/go-chi/chi"
-	"github.com/gobuffalo/packr/v2"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
 	"strconv"
 	"wilfrid.me/archive-central/pkg/central/peer"
 )
 
+//go:embed pages/store.html
+var storeForm []byte
+
+//go:embed pages/register.html
+var registerForm []byte
+
 type Server struct {
-	group        peer.Group
-	storeForm    []byte
-	registerForm []byte
-	logger       *zap.SugaredLogger
+	group  peer.Group
+	logger *zap.SugaredLogger
 }
 
-func NewServer(group peer.Group, logger *zap.SugaredLogger) (*Server, error) {
-	htmlPages := packr.New("HTML Box", "./html")
-	storeForm, err := htmlPages.FindString("store.html")
-	if err != nil {
-		return nil, errors.Wrap(err, "loading store page")
-	}
-	registerForm, err := htmlPages.FindString("register.html")
-	if err != nil {
-		return nil, errors.Wrap(err, "loading register page")
-	}
+func NewServer(group peer.Group, logger *zap.SugaredLogger) *Server {
 	return &Server{
-		group:        group,
-		storeForm:    []byte(storeForm),
-		registerForm: []byte(registerForm),
-		logger:       logger,
-	}, nil
+		group:  group,
+		logger: logger,
+	}
 }
 
 func (s *Server) GetRouter() *chi.Mux {
 	router := chi.NewMux()
 	router.Get("/api/page/{id}", s.GetPage)
 	router.Get("/api/store", s.StorePage)
-	router.Get("/store", s.staticPage(s.storeForm))
-	router.Get("/register", s.staticPage(s.registerForm))
+	router.Get("/store", s.staticPage(storeForm))
+	router.Get("/register", s.staticPage(registerForm))
 	return router
 }
 
@@ -61,7 +53,7 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Type", "text/pages")
 	w.WriteHeader(http.StatusAccepted)
 	if _, err := w.Write(page); err != nil {
 		s.logger.Errorw("failed to write page data", "msg", err.Error())

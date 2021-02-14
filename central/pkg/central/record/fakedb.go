@@ -32,6 +32,10 @@ func (db *FakeDatabase) Add(_ context.Context, snapshot archive.Snapshot) (int64
 	return id, nil
 }
 
+func (db *FakeDatabase) All(_ context.Context) ([]archive.Snapshot, error) {
+	return db.Snapshots, nil
+}
+
 func (db *FakeDatabase) GetPeer(_ context.Context, id int) (archive.Peer, error) {
 	idx := sort.Search(len(db.Peers), func(i int) bool {
 		return db.Peers[i].ID == id
@@ -46,4 +50,8 @@ func (db *FakeDatabase) AddPeer(_ context.Context, peer archive.Peer) (int64, er
 	peer.ID = len(db.Peers)
 	db.Peers = append(db.Peers, peer)
 	return int64(peer.ID), nil
+}
+
+func (db *FakeDatabase) AllPeers(_ context.Context) ([]archive.Peer, error) {
+	return db.Peers, nil
 }
