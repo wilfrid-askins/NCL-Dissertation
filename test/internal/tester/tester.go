@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"io/ioutil"
 	"net/http"
+	"sync"
 	"time"
 	"wilfrid.me/archive-central/pkg/central"
 	"wilfrid.me/archive-child/pkg/child"
@@ -16,11 +17,17 @@ import (
 
 type (
 	Config struct {
-		Name          string `json:"name"`
-		Target        string `json:"target"`
-		RequestNumber int    `json:"request-number"`
-		Duration      string `json:"duration"`
-		NodeNumber    int    `json:"node-number"`
+		Name  string `json:"name"`
+		Store struct {
+			Duration  string   `json:"duration"`
+			PerSecond int      `json:"per-second"`
+			Targets   []string `json:"targets"`
+		} `json:"store"`
+		Get struct {
+			Duration  string `json:"duration"`
+			PerSecond int    `json:"per-second"`
+		} `json:"get"`
+		NodeNumber int `json:"node-number"`
 	}
 
 	Tester struct {
@@ -33,17 +40,24 @@ type (
 		config   Config
 	}
 
+	Job struct {
+		target  string
+		execAt  time.Time
+		reqType string
+	}
+
 	ResultRow struct {
-		StatusCode int     `xlsx:"1"`
-		ReqFailed  bool    `xlsx:"2"`
-		ReqError   string  `xlsx:"3"`
-		ReqTime    float64 `xlsx:"4"`
-		ReadError  string  `xlsx:"5"`
-		DataSize   int     `xlsx:"6"`
+		Type       string  `xlsx:"1"`
+		StatusCode int     `xlsx:"2"`
+		ReqFailed  bool    `xlsx:"3"`
+		ReqError   string  `xlsx:"4"`
+		ReqTime    float64 `xlsx:"5"`
+		ReadError  string  `xlsx:"6"`
+		DataSize   int     `xlsx:"7"`
 	}
 )
 
-func New(config Config, centralConfig central.Config, logger *zap.SugaredLogger) (*Tester, error) {
+func New(ctx context.Context, config Config, centralConfig central.Config, logger *zap.SugaredLogger) (*Tester, error) {
 	ts := &Tester{config: config, logger: logger}
 
 	ts.central, ts.centErrs = ts.createCentral(ctx, centralConfig)
@@ -55,6 +69,7 @@ func New(config Config, centralConfig central.Config, logger *zap.SugaredLogger)
 		return nil, errors.Wrap(err, "creating spreadsheet")
 	}
 	ts.Sheet = sheet
+	return ts, nil
 }
 
 func (ts *Tester) Execute(ctx context.Context) error {
@@ -62,52 +77,117 @@ func (ts *Tester) Execute(ctx context.Context) error {
 		return errors.Wrap(err, "initiating tables")
 	}
 	// calculate delays
-	duration, err := time.ParseDuration(ts.config.Duration)
+	getDuration, err := time.ParseDuration(ts.config.Get.Duration)
 	if err != nil {
-		return errors.Wrap(err, "parsing duration")
+		return errors.Wrap(err, "parsing getDuration")
 	}
-	perRequest := duration / time.Duration(ts.config.RequestNumber)
+	storeDuration, err := time.ParseDuration(ts.config.Store.Duration)
+	if err != nil {
+		return errors.Wrap(err, "parsing storeDuration")
+	}
 
-	// run http requests at ip address
-	// record responses
-	// TODO: update this function
-	// needs to run multiple requests per second
-	// need rw mutex on sheet
+	// create worker pool
+	start := time.Now()
+	poolSize := ts.config.Get.PerSecond * 5
+	jobs := make(chan Job, poolSize)
+	results := make(chan ResultRow, poolSize)
+	done := make(chan struct{})
+	wg := sync.WaitGroup{}
+	defer close(jobs)
+	defer close(done)
+
+	// collector thread
 	go func() {
-		start := time.Now()
-		for i := 0; i < ts.config.RequestNumber; i++ {
-			rowVal := ResultRow{}
-			resp, err := http.Get(ts.config.Target)
-			rowVal.ReqTime = time.Now().Sub(start).Seconds()
-			rowVal.ReqFailed = err != nil
-			if err != nil {
-				rowVal.ReqError = err.Error()
-				continue
-			}
-
-			rowVal.StatusCode = resp.StatusCode
-			data, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				rowVal.ReadError = err.Error()
-				continue
-			}
-			rowVal.DataSize = len(data)
-
-			ts.addResult(rowVal)
-			time.Sleep(perRequest)
+		select {
+		case <-ts.centErrs:
+			err := <-ts.centErrs
+			ts.logger.Error(err)
+		case <-ts.peerErrs:
+			err := <-ts.peerErrs
+			ts.logger.Error(err)
+		case <-results:
+			res := <-results
+			row := ts.Sheet.AddRow()
+			row.WriteStruct(&res, -1)
+		case <-done:
+			break
+		case <-ctx.Done():
+			break
 		}
 	}()
 
-	select {
-	case <-ts.centErrs:
-		err := <-ts.centErrs
-		ts.logger.Error(err)
-	case <-ts.peerErrs:
-		err := <-ts.peerErrs
-		ts.logger.Error(err)
-	case <-ctx.Done():
-		return nil
+	// worker pool
+	for i := 0; i < poolSize; i++ {
+		go func() {
+			for job := range jobs {
+				// wait till start needed
+				for time.Now().Before(job.execAt) {
+				}
+				results <- getResult(start, job)
+				wg.Done()
+			}
+		}()
 	}
+
+	peers, err := ts.central.Records().AllPeers(ctx)
+	if err != nil {
+		return errors.Wrap(err, "querying peers")
+	}
+
+	// add store jobs to queue
+	storeGap := time.Second / time.Duration(ts.config.Store.PerSecond)
+	for i := time.Duration(0); i < storeDuration; i += storeGap {
+		url := ts.config.Store.Targets[int(i)%len(ts.config.Store.Targets)]
+		pid := peers[int(i)%len(peers)].ID
+		jobs <- Job{
+			target:  fmt.Sprintf("https://localhost/api/page?url=%s&peer=%d", url, pid),
+			execAt:  time.Now().Add(i),
+			reqType: "store",
+		}
+		wg.Add(1)
+	}
+	wg.Wait()
+
+	snaps, err := ts.central.Records().All(ctx)
+	if err != nil {
+		return errors.Wrap(err, "querying snapshots")
+	}
+
+	// add get jobs to queue
+	getGap := time.Second / time.Duration(ts.config.Get.PerSecond)
+	for i := time.Duration(0); i < getDuration; i += getGap {
+		sid := snaps[int(i)%len(snaps)].ID
+		jobs <- Job{
+			target:  fmt.Sprintf("https://localhost/api/page/%d", sid),
+			execAt:  time.Now().Add(i),
+			reqType: "get",
+		}
+		wg.Add(1)
+	}
+	wg.Wait()
+
+	return nil
+}
+
+func getResult(start time.Time, job Job) ResultRow {
+	rowVal := ResultRow{}
+	resp, err := http.Get(job.target)
+	rowVal.ReqTime = time.Now().Sub(start).Seconds()
+	rowVal.Type = job.reqType
+	rowVal.ReqFailed = err != nil
+	if err != nil {
+		rowVal.ReqError = err.Error()
+		return rowVal
+	}
+
+	rowVal.StatusCode = resp.StatusCode
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		rowVal.ReadError = err.Error()
+		return rowVal
+	}
+	rowVal.DataSize = len(data)
+	return rowVal
 }
 
 func (ts *Tester) initTables(ctx context.Context) error {
@@ -127,6 +207,7 @@ func (ts *Tester) initTables(ctx context.Context) error {
 			return errors.Wrap(err, "creating peer")
 		}
 	}
+	return nil
 }
 
 func (ts *Tester) createCentral(ctx context.Context, config central.Config) (*central.Resolver, <-chan error) {
@@ -146,11 +227,10 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, <-chan error
 	storePath := "./store"
 	portStart := 25566
 	// portEnd := 30000
-	nodeNum := 20
 	var peers []archive.Peer
 	errs := make(chan error)
 
-	for i := portStart; i < portStart+nodeNum; i++ {
+	for i := portStart; i < portStart+ts.config.NodeNumber; i++ {
 		node := child.NewListener(child.Config{
 			Port:      i,
 			StorePath: fmt.Sprintf("%s/%d", storePath, i),
@@ -166,9 +246,4 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, <-chan error
 		}(i)
 	}
 	return peers, errs
-}
-
-func (ts *Tester) addResult(result ResultRow) {
-	row := ts.Sheet.AddRow()
-	row.WriteStruct(&result, -1)
 }

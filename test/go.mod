@@ -10,8 +10,11 @@ replace wilfrid.me/netpb v0.0.0 => ../netpb/
 
 require (
 	github.com/gobuffalo/packr/v2 v2.8.1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/tealeg/xlsx v1.0.5 // indirect
 	golang.org/dl v0.0.0-20210204224843-1557c60ec592 // indirect
+	go.uber.org/zap v1.16.0
 	wilfrid.me/archive-central v0.0.0
 	wilfrid.me/archive-child v0.0.0
+	wilfrid.me/netpb v0.0.0 // indirect
 )

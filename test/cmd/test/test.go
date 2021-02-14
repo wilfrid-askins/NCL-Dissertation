@@ -23,9 +23,6 @@ var tests = []string{
 	"test1",
 }
 
-type (
-)
-
 func main() {
 	ctx, cfn := context.WithTimeout(context.Background(), time.Minute*10)
 	defer cfn()
@@ -53,7 +50,7 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	test, err := tester.New(params, config, logger)
+	test, err := tester.New(ctx, params, config, logger)
 	if err != nil {
 		logger.Fatal(err)
 	}

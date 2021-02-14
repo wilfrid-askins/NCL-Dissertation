@@ -1,6 +1,20 @@
 {
   "name": "Basic Test",
-  "target": "http://localhost:25565/api/page/12",
-  "request-number": 100,
-  "duration": "30s"
+  "store": {
+    "duration": "15s",
+    "per-second": 1,
+    "targets": [
+      "https://google.com",
+      "https://youtube.com",
+      "https://twitter.com",
+      "https://facebook.com",
+      "https://instagram.com",
+      "https://example.com"
+    ]
+  },
+  "get": {
+    "duration": "30s",
+    "per-second": 5
+  },
+  "node-number": 10
 }
