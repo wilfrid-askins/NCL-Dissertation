@@ -41,7 +41,7 @@ func Write(conn net.Conn, msg proto.Message) error {
 
 	length := len(data)
 	lengthData := make([]byte, 8)
-	binary.PutVarint(lengthData, int64(length))
+	binary.PutUvarint(lengthData, uint64(length))
 	if _, err := conn.Write(lengthData); err != nil {
 		return errors.Wrap(err, "writing to connection")
 	}

@@ -1,7 +1,6 @@
 package netpb
 
-import
-(
+import (
 	"encoding/binary"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
@@ -27,7 +26,7 @@ func handle(conn net.Conn, logger *zap.SugaredLogger, events *Emitter) error {
 			}
 			return errors.Wrap(err, "reading length bytes")
 		}
-		length, _ := binary.Varint(lenB)
+		length, _ := binary.Uvarint(lenB)
 
 		payload := make([]byte, length)
 		if _, err := conn.Read(payload); err != nil {
@@ -43,7 +42,7 @@ func handle(conn net.Conn, logger *zap.SugaredLogger, events *Emitter) error {
 			return errors.Wrap(err, "unwrapping proto")
 		}
 		events.Emit(int(pbp.Type), PacketEvent{
-			Conn: conn,
+			Conn:    conn,
 			Message: realMsg,
 		})
 	}

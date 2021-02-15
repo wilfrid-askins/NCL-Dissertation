@@ -8,16 +8,16 @@ import (
 )
 
 type Client struct {
-	addr string
-	conn net.Conn
+	addr      string
+	conn      net.Conn
 	Connected bool
-	Events *Emitter
-	logger *zap.SugaredLogger
+	Events    *Emitter
+	logger    *zap.SugaredLogger
 }
 
 func NewClient(addr string, logger *zap.SugaredLogger) *Client {
 	return &Client{
-		addr: addr,
+		addr:   addr,
 		Events: NewEmitter(),
 		logger: logger,
 	}
@@ -40,4 +40,3 @@ func (c *Client) Connect() error {
 func (c *Client) Send(msg proto.Message) error {
 	return Write(c.conn, msg)
 }
-
