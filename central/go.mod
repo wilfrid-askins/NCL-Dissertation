@@ -22,7 +22,7 @@ require (
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
 	golang.org/x/net v0.0.0-20201027133719-8eef5233e2a1 // indirect
-	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9 // indirect
+	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
 	golang.org/x/sys v0.0.0-20201101102859-da207088b7d1 // indirect
 	google.golang.org/genproto v0.0.0-20201026171402-d4b8fe4fd877 // indirect
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.0.1 // indirect

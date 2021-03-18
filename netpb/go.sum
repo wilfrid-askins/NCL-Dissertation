@@ -1,5 +1,11 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/billziss-gh/netchan v0.0.0-20170922210732-a2aa5d350575 h1:EMP+nwoPSSRLbAJDnAU+JL9is9mNZqDawVZqF6J4sik=
+github.com/billziss-gh/netchan v0.0.0-20170922210732-a2aa5d350575/go.mod h1:7cb3gWt6iRoQlTpqy4mZ8rmqP2BZ4WaDKN0qw8Hf9us=
+github.com/billziss-gh/netgob v0.0.0-20170922182552-157642ec0372 h1:ksRwkJwlgeRXy1GF0030uBRGSTqZQpyTF9wqNtCPqt0=
+github.com/billziss-gh/netgob v0.0.0-20170922182552-157642ec0372/go.mod h1:miORubDcOnT2Tu8CUJQAjfwkzpFNp+StdNmISoxrQKQ=
+github.com/billziss-gh/netjson v0.0.0-20170922182520-a9fb8f764298 h1:+Sl2PXNCqgD9oqM+EDicakXWsXca+DLC0sfFxV14ZzY=
+github.com/billziss-gh/netjson v0.0.0-20170922182520-a9fb8f764298/go.mod h1:vIbh7a2fOHc9uM+VBnNnoksHF8oakBFIy4cMJ98JDfQ=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -24,6 +30,8 @@ github.com/google/go-cmp v0.3.1/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMyw
 github.com/google/go-cmp v0.4.0/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.5.0/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
+github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
+github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=

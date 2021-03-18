@@ -1,0 +1,22 @@
+{
+  "database": {
+    "driver": "mysql",
+    "address": "localhost",
+    "port": 3306,
+    "name": "dev",
+    "username": "dev",
+    "password": "dev"
+  },
+  "http-server": {
+    "port": 25565
+  },
+  "cache": {
+    "address": "localhost:6379",
+    "username": "",
+    "password": "",
+    "database": 0
+  },
+  "snapshots": {
+    "mirrors": 3
+  }
+}

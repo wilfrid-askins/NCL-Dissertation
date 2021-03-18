@@ -17,10 +17,10 @@ import (
 )
 
 const root = "./tests"
-const output = "./output"
 
 var tests = []string{
 	"test1",
+	"test2",
 }
 
 func main() {

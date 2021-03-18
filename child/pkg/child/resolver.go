@@ -3,20 +3,28 @@ package child
 import (
 	"go.uber.org/zap"
 	"wilfrid.me/archive-child/pkg/child/file"
-	"wilfrid.me/netpb/pkg/netpb"
+	"wilfrid.me/archive-child/pkg/child/server"
 )
 
 type Resolver struct {
-	files    *file.Repository
-	listener *netpb.Listener
-	logger   *zap.SugaredLogger
-	config   Config
+	files  *file.Repository
+	server *server.Server
+	logger *zap.SugaredLogger
+	config Config
 }
 
 func NewResolver(config Config) *Resolver {
 	return &Resolver{
 		config: config,
 	}
+}
+
+func (re *Resolver) Server() *server.Server {
+	if re.server != nil {
+		return re.server
+	}
+	re.server = server.New(re.config.Port, re.Files(), re.Logger())
+	return re.server
 }
 
 func (re *Resolver) Files() *file.Repository {
@@ -31,14 +39,6 @@ func (re *Resolver) Files() *file.Repository {
 
 	re.files = files
 	return re.files
-}
-
-func (re *Resolver) Listener() *netpb.Listener {
-	if re.listener != nil {
-		return re.listener
-	}
-	re.listener = netpb.NewListener(re.config.Port, re.Logger())
-	return re.listener
 }
 
 func (re *Resolver) Logger() *zap.SugaredLogger {

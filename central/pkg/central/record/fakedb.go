@@ -52,6 +52,21 @@ func (db *FakeDatabase) AddPeer(_ context.Context, peer archive.Peer) (int64, er
 	return int64(peer.ID), nil
 }
 
-func (db *FakeDatabase) AllPeers(_ context.Context) ([]archive.Peer, error) {
-	return db.Peers, nil
+func (db *FakeDatabase) GetPeers(_ context.Context, limit int) ([]archive.Peer, error) {
+	return db.Peers[0:min(limit, len(db.Peers))], nil
+}
+
+func (db *FakeDatabase) GetMirrors(_ context.Context, _ int) ([]archive.Peer, error) {
+	return nil, nil
+}
+
+func (db *FakeDatabase) AddMirror(_ context.Context, _, _ int) (int64, error) {
+	return 0, errors.New("not yet implemented")
+}
+
+func min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
 }

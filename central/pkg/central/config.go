@@ -8,9 +8,10 @@ import (
 
 type (
 	Config struct {
-		Database Database   `json:"database"`
-		Server   HTTPServer `json:"http-server"`
-		Cache    Cache      `json:"cache"`
+		Database  Database   `json:"database"`
+		Server    HTTPServer `json:"http-server"`
+		Cache     Cache      `json:"cache"`
+		Snapshots Snapshots  `json:"snapshots"`
 	}
 
 	Database struct {
@@ -31,6 +32,10 @@ type (
 		Username string `json:"username"`
 		Password string `json:"password"`
 		Database int    `json:"database"`
+	}
+
+	Snapshots struct {
+		Mirrors int `json:"mirrors"`
 	}
 )
 

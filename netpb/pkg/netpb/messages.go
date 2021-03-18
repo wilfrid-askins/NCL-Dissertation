@@ -68,36 +68,20 @@ func wrap(msg proto.Message) (Payload, error) {
 	}, nil
 }
 
-func unwrap(p Payload) (proto.Message, error) {
-	msgBlank := messages[p.Type]
-	msgCopy := valueCopy(msgBlank)
-	if err := proto.Unmarshal(p.Data, msgCopy); err != nil {
+func unwrap(p *Payload) (proto.Message, error) {
+	var res proto.Message
+	switch p.Type {
+	case 0:
+		res = &PageRequest{}
+	case 1:
+		res = &PageTransfer{}
+	case 2:
+		res = &PageChunk{}
+	default:
+		return nil, errors.New("unknown message type")
+	}
+	if err := proto.Unmarshal(p.Data, res); err != nil {
 		return nil, errors.Wrap(err, "unmarshalling proto")
 	}
-	return msgCopy, nil
-}
-
-func valueCopy(msg proto.Message) proto.Message {
-	return msg
-}
-
-type (
-	Subscriber func(interface{})
-	Emitter    struct {
-		subs []Subscriber
-	}
-)
-
-func NewEmitter() *Emitter {
-	return &Emitter{
-		subs: make([]Subscriber, len(messages)),
-	}
-}
-
-func (e *Emitter) On(id int, sub Subscriber) {
-	e.subs[id] = sub
-}
-
-func (e *Emitter) Emit(id int, ev interface{}) {
-	e.subs[id](ev)
+	return res, nil
 }

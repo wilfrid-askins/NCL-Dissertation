@@ -11,5 +11,7 @@ type Repository interface {
 	All(context.Context) ([]archive.Snapshot, error)
 	GetPeer(context.Context, int) (archive.Peer, error)
 	AddPeer(context.Context, archive.Peer) (int64, error)
-	AllPeers(context.Context) ([]archive.Peer, error)
+	GetPeers(context.Context, int) ([]archive.Peer, error)
+	GetMirrors(context.Context, int) ([]archive.Peer, error)
+	AddMirror(context.Context, int, int) (int64, error)
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/tealeg/xlsx"
 	"go.uber.org/zap"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -27,7 +28,10 @@ type (
 			Duration  string `json:"duration"`
 			PerSecond int    `json:"per-second"`
 		} `json:"get"`
-		NodeNumber int `json:"node-number"`
+		Nodes struct {
+			Number   int `json:"number"`
+			Failures int `json:"failures"`
+		} `json:"nodes"`
 	}
 
 	Tester struct {
@@ -47,13 +51,15 @@ type (
 	}
 
 	ResultRow struct {
-		Type       string  `xlsx:"1"`
-		StatusCode int     `xlsx:"2"`
-		ReqFailed  bool    `xlsx:"3"`
-		ReqError   string  `xlsx:"4"`
-		ReqTime    float64 `xlsx:"5"`
-		ReadError  string  `xlsx:"6"`
-		DataSize   int     `xlsx:"7"`
+		Type        string  `xlsx:"1"`
+		Target      string  `xlsx:"2"`
+		StatusCode  int     `xlsx:"3"`
+		ReqFailed   bool    `xlsx:"4"`
+		ReqError    string  `xlsx:"5"`
+		ReqTime     float64 `xlsx:"6"`
+		ReqDuration float64 `xlsx:"7"`
+		ReadError   string  `xlsx:"8"`
+		DataSize    int     `xlsx:"9"`
 	}
 )
 
@@ -88,35 +94,34 @@ func (ts *Tester) Execute(ctx context.Context) error {
 
 	// create worker pool
 	start := time.Now()
-	poolSize := ts.config.Get.PerSecond * 5
+	poolSize := ts.config.Get.PerSecond * int(getDuration.Seconds())
 	jobs := make(chan Job, poolSize)
 	results := make(chan ResultRow, poolSize)
 	done := make(chan struct{})
-	wg := sync.WaitGroup{}
+	var wg sync.WaitGroup
 	defer close(jobs)
 	defer close(done)
 
-	// collector thread
 	go func() {
-		select {
-		case <-ts.centErrs:
-			err := <-ts.centErrs
-			ts.logger.Error(err)
-		case <-ts.peerErrs:
-			err := <-ts.peerErrs
-			ts.logger.Error(err)
-		case <-results:
-			res := <-results
-			row := ts.Sheet.AddRow()
-			row.WriteStruct(&res, -1)
-		case <-done:
-			break
-		case <-ctx.Done():
-			break
+		ts.logger.Info("running collector thread")
+		for {
+			select {
+			case err := <-ts.centErrs:
+				ts.logger.Error(err)
+			case err := <-ts.peerErrs:
+				ts.logger.Error(err)
+			case res := <-results:
+				row := ts.Sheet.AddRow()
+				row.WriteStruct(&res, -1)
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
-	// worker pool
+	ts.logger.Info("creating worker pool")
 	for i := 0; i < poolSize; i++ {
 		go func() {
 			for job := range jobs {
@@ -129,23 +134,26 @@ func (ts *Tester) Execute(ctx context.Context) error {
 		}()
 	}
 
-	peers, err := ts.central.Records().AllPeers(ctx)
+	peers, err := ts.central.Records().GetPeers(ctx, -1)
 	if err != nil {
 		return errors.Wrap(err, "querying peers")
 	}
 
-	// add store jobs to queue
+	ts.logger.Info("queueing store jobs")
 	storeGap := time.Second / time.Duration(ts.config.Store.PerSecond)
+	totalStores := 0
 	for i := time.Duration(0); i < storeDuration; i += storeGap {
-		url := ts.config.Store.Targets[int(i)%len(ts.config.Store.Targets)]
-		pid := peers[int(i)%len(peers)].ID
+		url := ts.config.Store.Targets[totalStores%len(ts.config.Store.Targets)]
+		pid := peers[totalStores%len(peers)].ID
 		jobs <- Job{
-			target:  fmt.Sprintf("https://localhost/api/page?url=%s&peer=%d", url, pid),
+			target:  fmt.Sprintf("http://localhost:25565/api/store?url=%s&peer=%d", url, pid),
 			execAt:  time.Now().Add(i),
 			reqType: "store",
 		}
 		wg.Add(1)
+		totalStores++
 	}
+	ts.logger.Info("waiting for store jobs")
 	wg.Wait()
 
 	snaps, err := ts.central.Records().All(ctx)
@@ -153,26 +161,38 @@ func (ts *Tester) Execute(ctx context.Context) error {
 		return errors.Wrap(err, "querying snapshots")
 	}
 
-	// add get jobs to queue
+	ts.logger.Info("queueing get jobs")
 	getGap := time.Second / time.Duration(ts.config.Get.PerSecond)
+	totalGets := 0
 	for i := time.Duration(0); i < getDuration; i += getGap {
-		sid := snaps[int(i)%len(snaps)].ID
+		sid := snaps[totalGets%len(snaps)].ID
 		jobs <- Job{
-			target:  fmt.Sprintf("https://localhost/api/page/%d", sid),
+			target:  fmt.Sprintf("http://localhost:25565/api/page/%d", sid),
 			execAt:  time.Now().Add(i),
 			reqType: "get",
 		}
 		wg.Add(1)
+		totalGets++
 	}
+	ts.logger.Info("waiting for get jobs")
 	wg.Wait()
+	ts.logger.Info("all jobs finished")
 
 	return nil
 }
 
 func getResult(start time.Time, job Job) ResultRow {
+	client := http.Client{
+		Timeout: 10 * time.Second,
+	}
 	rowVal := ResultRow{}
-	resp, err := http.Get(job.target)
-	rowVal.ReqTime = time.Now().Sub(start).Seconds()
+	startReq := time.Now()
+
+	rowVal.ReqTime = startReq.Sub(start).Seconds()
+	resp, err := client.Get(job.target)
+	rowVal.ReqDuration = time.Now().Sub(startReq).Seconds()
+
+	rowVal.Target = job.target
 	rowVal.Type = job.reqType
 	rowVal.ReqFailed = err != nil
 	if err != nil {
@@ -191,14 +211,19 @@ func getResult(start time.Time, job Job) ResultRow {
 }
 
 func (ts *Tester) initTables(ctx context.Context) error {
-	// clear old peers and snapshots
-	_, err := ts.central.Database().ExecContext(ctx, "TRUNCATE TABLE snapshots;")
-	if err != nil {
-		return errors.Wrap(err, "clearing snapshots")
+	// clear old tables
+	cmds := []string{
+		"SET FOREIGN_KEY_CHECKS = 0;",
+		"TRUNCATE TABLE mirrors;",
+		"TRUNCATE TABLE snapshots;",
+		"TRUNCATE TABLE peers;",
+		"SET FOREIGN_KEY_CHECKS = 1;",
 	}
-	_, err = ts.central.Database().ExecContext(ctx, "TRUNCATE TABLE peers;")
-	if err != nil {
-		return errors.Wrap(err, "clearing peers")
+	for _, cmd := range cmds {
+		_, err := ts.central.Database().ExecContext(ctx, cmd)
+		if err != nil {
+			return errors.Wrap(err, "running db cmd")
+		}
 	}
 	// add peers to database
 	for _, p := range ts.peers {
@@ -230,20 +255,36 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, <-chan error
 	var peers []archive.Peer
 	errs := make(chan error)
 
-	for i := portStart; i < portStart+ts.config.NodeNumber; i++ {
-		node := child.NewListener(child.Config{
-			Port:      i,
-			StorePath: fmt.Sprintf("%s/%d", storePath, i),
+	// decide failures
+	failCount := 0
+	failures := make(map[int]bool)
+	for failCount < ts.config.Nodes.Failures {
+		ind := rand.Intn(ts.config.Nodes.Number) + 1
+		if failures[ind] {
+			continue
+		}
+		failures[ind] = true
+		failCount++
+	}
+
+	for i := 0; i < ts.config.Nodes.Number; i++ {
+		port := portStart + i
+		res := child.NewResolver(child.Config{
+			Port:      port,
+			StorePath: fmt.Sprintf("%s/%d/", storePath, i),
 		})
 		peers = append(peers, archive.Peer{
 			ID:      i,
 			Address: fmt.Sprintf("localhost:%d", i),
 		})
+		if failures[i] {
+			continue
+		}
 		go func(port int) {
-			if err := node.Listen(); err != nil {
+			if err := res.Server().Listen(ctx); err != nil {
 				errs <- errors.Wrapf(err, "failed to listen on port %d", port)
 			}
-		}(i)
+		}(port)
 	}
 	return peers, errs
 }
