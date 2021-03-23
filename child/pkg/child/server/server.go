@@ -38,7 +38,7 @@ func (s *Server) Listen(ctx context.Context) error {
 	for {
 		select {
 		case con := <-cons:
-			go s.handle(ctx, con)
+			go s.handle(con)
 		case err := <-errs:
 			if err != nil {
 				s.logger.Errorw("connection error", "err", err.Error())
@@ -49,7 +49,7 @@ func (s *Server) Listen(ctx context.Context) error {
 	}
 }
 
-func (s *Server) handle(ctx context.Context, con netpb.Connection) {
+func (s *Server) handle(con netpb.Connection) {
 	for {
 		select {
 		case p := <-con.Rec:
@@ -93,11 +93,6 @@ func (s *Server) handle(ctx context.Context, con netpb.Connection) {
 			}
 		case err := <-con.Errs:
 			s.logger.Errorw("handler error", "err", err.Error())
-		case <-ctx.Done():
-			if err := con.Close(); err != nil {
-				s.logger.Errorw("closing peer con", "msg", err.Error())
-			}
-			break
 		}
 	}
 }

@@ -45,13 +45,14 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
+	s.logger.Infow("getting page", "num", id)
 	page, err := s.group.Get(r.Context(), id)
 	if err != nil {
 		s.logger.Errorw("failed to get page", "msg", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	s.logger.Infow("writing page", "num", id)
 
 	w.Header().Set("Content-Type", "text/pages")
 	w.WriteHeader(http.StatusAccepted)

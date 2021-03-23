@@ -72,8 +72,8 @@
     ]
   },
   "get": {
-    "duration": "60s",
-    "per-second": 15
+    "duration": "15s",
+    "per-second": 5
   },
   "nodes": {
     "number": 100,

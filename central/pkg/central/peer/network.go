@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/singleflight"
 	"io/ioutil"
 	"net/http"
+	"sync"
 	"time"
 	"wilfrid.me/archive-central/pkg/central/record"
 	"wilfrid.me/netpb/pkg/archive"
@@ -19,33 +20,67 @@ import (
 )
 
 const (
-	cacheTime    = time.Hour
-	searchFactor = 4
-	mirrorTime   = time.Minute * 2
+	cacheTime      = time.Hour
+	searchFactor   = 4
+	mirrorTime     = time.Minute * 2
+	firstCacheTime = time.Minute * 10
 )
 
 type (
 	Network struct {
 		records      record.Repository
+		firstCache   map[int]*cached
+		firstCacheMx sync.RWMutex
 		cache        *redis.Client
 		transfers    *netpb.Transfer
-		mirrors      int
-		pool         *netpb.Pool
-		logger       *zap.SugaredLogger
 		requestGroup singleflight.Group
+		logger       *zap.SugaredLogger
+		mirrors      int
+	}
+
+	cached struct {
+		data []byte
+		age  time.Time
 	}
 )
 
 func NewNetwork(records record.Repository, cache *redis.Client, mirrors int, logger *zap.SugaredLogger) *Network {
 	return &Network{
-		records:   records,
-		cache:     cache,
-		transfers: netpb.NewTransfer(logger),
-		mirrors:   mirrors,
-		pool:      netpb.NewPool(),
-		logger:    logger,
+		records:      records,
+		firstCache:   make(map[int]*cached),
+		firstCacheMx: sync.RWMutex{},
+		cache:        cache,
+		transfers:    netpb.NewTransfer(logger),
+		mirrors:      mirrors,
+		logger:       logger,
 	}
 }
+
+/*
+func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
+	//nw.firstCacheMx.RLock()
+	//defer nw.firstCacheMx.RUnlock()
+	//if cached, pres := nw.firstCache[id]; pres {
+	//	nw.logger.Info("first cache hit")
+	//	cached.age = time.Now()
+	//	return cached.data, nil
+	//}
+
+	data, err, _ := nw.requestGroup.Do(fmt.Sprintf("page-%d", id), func() (interface{}, error) {
+		data, err := nw.getWork(ctx, id)
+		return data, err
+	})
+	bdata := (data).([]byte)
+
+	//nw.firstCacheMx.Lock()
+	//defer nw.firstCacheMx.Unlock()
+	//nw.firstCache[id] = &cached{
+	//	data: bdata,
+	//	age:  time.Now(),
+	//}
+	return bdata, err
+}
+*/
 
 func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	// check cache
@@ -58,6 +93,7 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 		return cached, nil
 	}
 
+	nw.logger.Infow("getting record", "id", id)
 	// find peer
 	snap, err := nw.records.Get(ctx, id)
 	if err != nil {
@@ -72,20 +108,21 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	peers = append(peers, snap.Peer)
 	peers = append(peers, mirrors...)
 
-	data, err, _ := nw.requestGroup.Do(fmt.Sprintf("%s-%d", snap.Peer.Address, id), func() (interface{}, error) {
-		data, err := nw.getWithFallback(ctx, id, peers)
-		return data, err
-	})
+	nw.logger.Infow("messaging peers", "id", id)
+
+	//data, err, _ := nw.requestGroup.Do(fmt.Sprintf("network-%d", id), func() (interface{}, error) {
+	//	data, err := nw.getWithFallback(ctx, id, peers)
+	//	return data, err
+	//})
+	data, err := nw.getWithFallback(ctx, id, peers)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting from peer")
-		// TODO try mirrors if not found
+		return nil, errors.Wrap(err, "getting from peers")
 	}
-	bdata := (data).([]byte)
+	bdata := data // (data).([]byte)
 
 	if err := nw.cache.Set(ctx, key, bdata, cacheTime).Err(); err != nil {
 		nw.logger.Errorw("failed to set cache", "msg", err.Error())
 	}
-
 	return bdata, nil
 }
 
@@ -147,31 +184,16 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 		}()
 	}
 
-	//con, cfn, err := nw.pool.Connect(peer.Address)
-	//if err != nil {
-	//	return 0, errors.Wrap(err, "connecting to peer")
-	//}
-	//defer cfn()
 	con, err := netpb.Connect(ctx, peer.Address, nw.logger)
 	if err != nil {
 		return 0, errors.Wrap(err, "connecting to peer")
 	}
-	defer func() {
-		if err := con.Close(); err != nil {
-			nw.logger.Errorw("closing connection to peer", "msg", err.Error())
-		}
-	}()
+	defer con.Close()
 
 	if err := netpb.SendPage(recID, comp.Bytes(), con.Write); err != nil {
 		return 0, errors.Wrap(err, "sending page data")
 	}
-
-	select {
-	case err := <-con.Errs:
-		return 0, errors.Wrap(err, "connection error")
-	default:
-		return int(recID), nil
-	}
+	return int(recID), nil
 }
 
 func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []byte) error {
@@ -197,17 +219,11 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 			continue
 		}
 
-		select {
-		case err := <-con.Errs:
-			nw.logger.Errorw("transferring to mirror", "msg", err.Error())
+		if _, err := nw.records.AddMirror(ctx, peer.ID, recID); err != nil {
+			nw.logger.Errorw("adding mirror record", "msg", err.Error())
 			continue
-		default:
-			if _, err := nw.records.AddMirror(ctx, peer.ID, recID); err != nil {
-				nw.logger.Errorw("adding mirror record", "msg", err.Error())
-				continue
-			}
-			needed--
 		}
+		needed--
 		con.Close()
 	}
 	if needed > 0 {
@@ -229,23 +245,15 @@ func (nw *Network) getWithFallback(ctx context.Context, id int, peers []archive.
 }
 
 func (nw *Network) getFromPeer(ctx context.Context, id int, address string) ([]byte, error) {
+	nw.logger.Infow("messaging peer", "id", id, "addr", address)
 	var notFound bool
 	var result []byte
 
-	//con, cfn, err := nw.pool.Connect(address)
-	//if err != nil {
-	//	return nil, errors.Wrap(err, "connecting to peer")
-	//}
-	//defer cfn()
 	con, err := netpb.Connect(ctx, address, nw.logger)
 	if err != nil {
 		return nil, errors.Wrap(err, "connecting to peer")
 	}
-	defer func() {
-		if err := con.Close(); err != nil {
-			nw.logger.Errorw("closing connection", "msg", err.Error())
-		}
-	}()
+	defer con.Close()
 
 	if err := con.Write(&netpb.PageRequest{
 		Id: int64(id),
@@ -259,6 +267,7 @@ loop:
 		case p := <-con.Rec:
 			switch p.(type) {
 			case *netpb.PageTransfer:
+				nw.logger.Infow("transfer from", "id", id, "addr", address)
 				trans := p.(*netpb.PageTransfer)
 				if !trans.Found {
 					notFound = true
@@ -289,5 +298,6 @@ loop:
 
 	// TODO test checksum here
 
+	nw.logger.Infow("transfer finished from", "id", id, "addr", address)
 	return result, nil
 }

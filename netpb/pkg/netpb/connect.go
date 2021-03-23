@@ -14,7 +14,6 @@ type Connection struct {
 	conn   net.Conn
 	Rec    chan proto.Message
 	Errs   chan error
-	closer chan int
 	closed bool
 }
 
@@ -34,10 +33,8 @@ func (c *Connection) Write(msg proto.Message) error {
 	return nil
 }
 
-func (c *Connection) Close() error {
-	c.closer <- 0
+func (c *Connection) Close() {
 	c.closed = true
-	return c.conn.Close()
 }
 
 func handle(ctx context.Context, conn net.Conn, logger *zap.SugaredLogger) (Connection, error) {
@@ -51,6 +48,8 @@ func handle(ctx context.Context, conn net.Conn, logger *zap.SugaredLogger) (Conn
 			if err := conn.Close(); err != nil {
 				logger.Errorw("closing connection", "msg", err.Error())
 			}
+			close(peer.Rec)
+			close(peer.Errs)
 		}()
 		for !peer.closed {
 			lenB := make([]byte, 8)
@@ -82,19 +81,8 @@ func handle(ctx context.Context, conn net.Conn, logger *zap.SugaredLogger) (Conn
 	}()
 
 	go func() {
-	loop:
-		for {
-			select {
-			case <-ctx.Done():
-				if err := peer.Close(); err != nil {
-					logger.Errorw("closing peer", "msg", err.Error())
-				}
-			case <-peer.closer:
-				close(peer.Rec)
-				close(peer.Errs)
-				break loop
-			}
-		}
+		<-ctx.Done()
+		peer.Close()
 	}()
 
 	return peer, nil
