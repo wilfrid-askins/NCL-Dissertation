@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"net"
 )
 
-func Serve(ctx context.Context, port int) (chan Connection, chan error, error) {
+func Serve(ctx context.Context, port int, logger *zap.SugaredLogger) (chan Connection, chan error, error) {
 	newCons := make(chan net.Conn)
 	cons := make(chan Connection)
 	errs := make(chan error)
@@ -33,7 +34,7 @@ func Serve(ctx context.Context, port int) (chan Connection, chan error, error) {
 		for {
 			select {
 			case conn := <-newCons:
-				peer, err := handle(ctx, conn)
+				peer, err := handle(ctx, conn, logger)
 				if err != nil {
 					errs <- errors.Wrap(err, "failed to handle connection")
 				}

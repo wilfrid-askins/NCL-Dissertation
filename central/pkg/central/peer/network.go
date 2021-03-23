@@ -152,13 +152,19 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 	//	return 0, errors.Wrap(err, "connecting to peer")
 	//}
 	//defer cfn()
-	con, err := netpb.Connect(ctx, peer.Address)
+	con, err := netpb.Connect(ctx, peer.Address, nw.logger)
 	if err != nil {
 		return 0, errors.Wrap(err, "connecting to peer")
 	}
-	defer con.Close()
+	defer func() {
+		if err := con.Close(); err != nil {
+			nw.logger.Errorw("closing connection to peer", "msg", err.Error())
+		}
+	}()
 
-	netpb.SendPage(recID, comp.Bytes(), con.Send)
+	if err := netpb.SendPage(recID, comp.Bytes(), con.Write); err != nil {
+		return 0, errors.Wrap(err, "sending page data")
+	}
 
 	select {
 	case err := <-con.Errs:
@@ -181,12 +187,15 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 			continue
 		}
 
-		con, err := netpb.Connect(ctx, peer.Address)
+		con, err := netpb.Connect(ctx, peer.Address, nw.logger)
 		if err != nil {
 			nw.logger.Errorw("connecting to mirror peer", "msg", err.Error())
 			continue
 		}
-		netpb.SendPage(int64(recID), data, con.Send)
+		if err := netpb.SendPage(int64(recID), data, con.Write); err != nil {
+			nw.logger.Errorw("sending page", "msg", err.Error())
+			continue
+		}
 
 		select {
 		case err := <-con.Errs:
@@ -228,14 +237,20 @@ func (nw *Network) getFromPeer(ctx context.Context, id int, address string) ([]b
 	//	return nil, errors.Wrap(err, "connecting to peer")
 	//}
 	//defer cfn()
-	con, err := netpb.Connect(ctx, address)
+	con, err := netpb.Connect(ctx, address, nw.logger)
 	if err != nil {
 		return nil, errors.Wrap(err, "connecting to peer")
 	}
-	defer con.Close()
+	defer func() {
+		if err := con.Close(); err != nil {
+			nw.logger.Errorw("closing connection", "msg", err.Error())
+		}
+	}()
 
-	con.Send <- &netpb.PageRequest{
+	if err := con.Write(&netpb.PageRequest{
 		Id: int64(id),
+	}); err != nil {
+		return nil, errors.Wrap(err, "sending page request")
 	}
 
 loop:

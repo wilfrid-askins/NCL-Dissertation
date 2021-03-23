@@ -5,42 +5,54 @@ import (
 	"encoding/binary"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"io"
 	"net"
 )
 
 type Connection struct {
-	Send chan proto.Message
-	Rec  chan proto.Message
-	Errs chan error
+	conn   net.Conn
+	Rec    chan proto.Message
+	Errs   chan error
+	closer chan int
+	closed bool
 }
 
-func (c *Connection) Close() {
-	c.Send <- nil
-}
-
-func Connect(ctx context.Context, addr string) (Connection, error) {
+func Connect(ctx context.Context, addr string, logger *zap.SugaredLogger) (Connection, error) {
 	dail := net.Dialer{}
 	conn, err := dail.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return Connection{}, errors.Wrap(err, "dialing address")
 	}
-	return handle(ctx, conn)
+	return handle(ctx, conn, logger)
 }
 
-func handle(ctx context.Context, conn net.Conn) (Connection, error) {
+func (c *Connection) Write(msg proto.Message) error {
+	if err := Write(c.conn, msg); err != nil {
+		return errors.Wrap(err, "writing msg")
+	}
+	return nil
+}
+
+func (c *Connection) Close() error {
+	c.closer <- 0
+	c.closed = true
+	return c.conn.Close()
+}
+
+func handle(ctx context.Context, conn net.Conn, logger *zap.SugaredLogger) (Connection, error) {
 	peer := Connection{
-		Send: make(chan proto.Message),
+		conn: conn,
 		Rec:  make(chan proto.Message),
 		Errs: make(chan error),
 	}
 	go func() {
 		defer func() {
 			if err := conn.Close(); err != nil {
-				peer.Errs <- err
+				logger.Errorw("closing connection", "msg", err.Error())
 			}
 		}()
-		for {
+		for !peer.closed {
 			lenB := make([]byte, 8)
 			if _, err := conn.Read(lenB); err != nil {
 				if err == io.EOF {
@@ -73,16 +85,11 @@ func handle(ctx context.Context, conn net.Conn) (Connection, error) {
 	loop:
 		for {
 			select {
-			case msg := <-peer.Send:
-				if msg == nil {
-					close(peer.Rec)
-					close(peer.Errs)
-					break loop
-				}
-				if err := Write(conn, msg); err != nil {
-					peer.Errs <- err
-				}
 			case <-ctx.Done():
+				if err := peer.Close(); err != nil {
+					logger.Errorw("closing peer", "msg", err.Error())
+				}
+			case <-peer.closer:
 				close(peer.Rec)
 				close(peer.Errs)
 				break loop

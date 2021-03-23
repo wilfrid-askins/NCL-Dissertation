@@ -1,8 +1,8 @@
 {
   "name": "Basic Test",
   "store": {
-    "duration": "30s",
-    "per-second": 10,
+    "duration": "15s",
+    "per-second": 3,
     "targets": [
       "https://google.com",
       "https://youtube.com",

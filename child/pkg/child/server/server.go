@@ -30,7 +30,7 @@ func (s *Server) Listen(ctx context.Context) error {
 	ctx, cfn := context.WithCancel(ctx)
 	defer cfn()
 
-	cons, errs, err := netpb.Serve(ctx, s.port)
+	cons, errs, err := netpb.Serve(ctx, s.port, s.logger)
 	if err != nil {
 		return errors.Wrap(err, "serving on port")
 	}
@@ -84,14 +84,19 @@ func (s *Server) handle(ctx context.Context, con netpb.Connection) {
 					s.logger.Errorw("failed to close compression", "msg", err.Error())
 					continue
 				}
-				netpb.SendPage(req.Id, comp.Bytes(), con.Send)
+				if err := netpb.SendPage(req.Id, comp.Bytes(), con.Write); err != nil {
+					s.logger.Errorw("failed to send page", "msg", err.Error())
+					continue
+				}
 			default:
 				s.logger.Error("unknown packet type")
 			}
 		case err := <-con.Errs:
 			s.logger.Errorw("handler error", "err", err.Error())
 		case <-ctx.Done():
-			con.Close()
+			if err := con.Close(); err != nil {
+				s.logger.Errorw("closing peer con", "msg", err.Error())
+			}
 			break
 		}
 	}

@@ -41,7 +41,7 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		s.logger.Errorw("failed to get page", "msg", err.Error())
+		s.logger.Errorw("failed to parse page id", "msg", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

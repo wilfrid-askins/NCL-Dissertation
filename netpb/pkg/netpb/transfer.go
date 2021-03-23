@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io/ioutil"
 	"math"
@@ -69,22 +70,27 @@ func (tr *Transfer) Push(chunk *PageChunk) (bool, []byte) {
 	return false, nil
 }
 
-func SendPage(reqID int64, data []byte, send chan proto.Message) {
+func SendPage(reqID int64, data []byte, send func(proto.Message) error) error {
 	chunkNum := divRoundUp(len(data), chunkSize)
-	send <- &PageTransfer{
+	if err := send(&PageTransfer{
 		Id:        reqID,
 		Found:     true,
 		ChunkSize: int64(chunkSize),
 		ChunkNum:  int64(chunkNum),
 		TotalSize: int64(len(data)),
+	}); err != nil {
+		return errors.Wrap(err, "sending page transfer req")
 	}
 	for i := 0; i < chunkNum; i++ {
-		send <- &PageChunk{
+		if err := send(&PageChunk{
 			Id:    reqID,
 			Chunk: int64(i),
 			Data:  data[i*chunkSize : min((i+1)*chunkSize, len(data))],
+		}); err != nil {
+			return errors.Wrap(err, "sending page chunk")
 		}
 	}
+	return nil
 }
 
 func divRoundUp(x, y int) int {

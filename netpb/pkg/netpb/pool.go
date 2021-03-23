@@ -33,7 +33,7 @@ func (p *Pool) Connect(address string) (Connection, context.CancelFunc, error) {
 	if !pres {
 		// connect
 		ctx := context.Background()
-		con, err := Connect(ctx, address)
+		con, err := Connect(ctx, address, nil) // TODO: logger here
 		if err != nil {
 			return Connection{}, nil, errors.Wrap(err, "connecting to address")
 		}
