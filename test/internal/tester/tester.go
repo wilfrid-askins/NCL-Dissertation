@@ -35,13 +35,14 @@ type (
 	}
 
 	Tester struct {
-		central  *central.Resolver
-		peers    []archive.Peer
-		Sheet    *xlsx.Sheet
-		logger   *zap.SugaredLogger
-		centErrs <-chan error
-		peerErrs <-chan error
-		config   Config
+		central     *central.Resolver
+		peers       []archive.Peer
+		peerCancels map[int]context.CancelFunc
+		Sheet       *xlsx.Sheet
+		logger      *zap.SugaredLogger
+		centErrs    <-chan error
+		peerErrs    <-chan error
+		config      Config
 	}
 
 	Job struct {
@@ -67,7 +68,7 @@ func New(ctx context.Context, config Config, centralConfig central.Config, logge
 	ts := &Tester{config: config, logger: logger}
 
 	ts.central, ts.centErrs = ts.createCentral(ctx, centralConfig)
-	ts.peers, ts.peerErrs = ts.createPeers(ctx)
+	ts.peers, ts.peerCancels, ts.peerErrs = ts.createPeers(ctx)
 
 	f := xlsx.NewFile()
 	sheet, err := f.AddSheet(config.Name)
@@ -161,6 +162,16 @@ func (ts *Tester) Execute(ctx context.Context) error {
 		return errors.Wrap(err, "querying snapshots")
 	}
 
+	// shutdown 'failed' nodes
+	failures := getFailures(ts.config.Nodes.Number, ts.config.Nodes.Failures)
+	for key, val := range failures {
+		if !val {
+			continue
+		}
+		cfn := ts.peerCancels[key]
+		cfn()
+	}
+
 	ts.logger.Info("queueing get jobs")
 	getGap := time.Second / time.Duration(ts.config.Get.PerSecond)
 	totalGets := 0
@@ -248,24 +259,13 @@ func (ts *Tester) createCentral(ctx context.Context, config central.Config) (*ce
 	return node, errs
 }
 
-func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, <-chan error) {
+func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]context.CancelFunc, <-chan error) {
 	storePath := "./store"
 	portStart := 25566
 	// portEnd := 30000
 	var peers []archive.Peer
+	peerCancels := make(map[int]context.CancelFunc)
 	errs := make(chan error)
-
-	// decide failures
-	failCount := 0
-	failures := make(map[int]bool)
-	for failCount < ts.config.Nodes.Failures {
-		ind := rand.Intn(ts.config.Nodes.Number) + 1
-		if failures[ind] {
-			continue
-		}
-		failures[ind] = true
-		failCount++
-	}
 
 	for i := 0; i < ts.config.Nodes.Number; i++ {
 		port := portStart + i
@@ -275,16 +275,29 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, <-chan error
 		})
 		peers = append(peers, archive.Peer{
 			ID:      i,
-			Address: fmt.Sprintf("localhost:%d", i),
+			Address: fmt.Sprintf("localhost:%d", port),
 		})
-		if failures[i] {
-			continue
-		}
-		go func(port int) {
-			if err := res.Server().Listen(ctx); err != nil {
+		nctx, cfn := context.WithCancel(ctx)
+		peerCancels[i] = cfn
+		go func(nctx context.Context, port int) {
+			if err := res.Server().Listen(nctx); err != nil {
 				errs <- errors.Wrapf(err, "failed to listen on port %d", port)
 			}
-		}(port)
+		}(nctx, port)
 	}
-	return peers, errs
+	return peers, peerCancels, errs
+}
+
+func getFailures(nodes, fails int) map[int]bool {
+	failCount := 0
+	failures := make(map[int]bool)
+	for failCount < fails {
+		ind := rand.Intn(nodes) + 1
+		if failures[ind] {
+			continue
+		}
+		failures[ind] = true
+		failCount++
+	}
+	return failures
 }

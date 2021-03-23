@@ -1,7 +1,7 @@
 {
   "name": "Failure Test",
   "store": {
-    "duration": "5s",
+    "duration": "20s",
     "per-second": 5,
     "targets": [
       "https://google.com",
@@ -73,7 +73,7 @@
   },
   "get": {
     "duration": "10s",
-    "per-second": 5
+    "per-second": 10
   },
   "nodes": {
     "number": 100,

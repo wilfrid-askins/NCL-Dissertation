@@ -65,7 +65,7 @@ func (re *Resolver) Group() peer.Group {
 	if re.group != nil {
 		return re.group
 	}
-	re.group = peer.NewNetwork(re.Records(), re.Cache(), re.Logger())
+	re.group = peer.NewNetwork(re.Records(), re.Cache(), re.config.Snapshots.Mirrors, re.Logger())
 	return re.group
 }
 

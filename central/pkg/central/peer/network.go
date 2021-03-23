@@ -20,9 +20,7 @@ import (
 
 const (
 	cacheTime    = time.Hour
-	mirror       = true
-	mirrorFactor = 3
-	searchFactor = 3
+	searchFactor = 4
 	mirrorTime   = time.Minute * 2
 )
 
@@ -31,17 +29,19 @@ type (
 		records      record.Repository
 		cache        *redis.Client
 		transfers    *netpb.Transfer
+		mirrors      int
 		pool         *netpb.Pool
 		logger       *zap.SugaredLogger
 		requestGroup singleflight.Group
 	}
 )
 
-func NewNetwork(records record.Repository, cache *redis.Client, logger *zap.SugaredLogger) *Network {
+func NewNetwork(records record.Repository, cache *redis.Client, mirrors int, logger *zap.SugaredLogger) *Network {
 	return &Network{
 		records:   records,
 		cache:     cache,
 		transfers: netpb.NewTransfer(logger),
+		mirrors:   mirrors,
 		pool:      netpb.NewPool(),
 		logger:    logger,
 	}
@@ -137,7 +137,7 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 		return 0, errors.Wrap(err, "creating new page record")
 	}
 
-	if mirror {
+	if nw.mirrors > 0 {
 		go func() {
 			nctx, cfn := context.WithTimeout(context.Background(), mirrorTime)
 			defer cfn()
@@ -169,11 +169,11 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 }
 
 func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []byte) error {
-	peers, err := nw.records.GetPeers(ctx, mirrorFactor*searchFactor)
+	peers, err := nw.records.GetPeers(ctx, nw.mirrors*searchFactor)
 	if err != nil {
 		return errors.Wrap(err, "getting list of peers")
 	}
-	needed := mirrorFactor
+	needed := nw.mirrors
 	for needed > 0 && len(peers) > 0 {
 		peer := peers[0]
 		peers = peers[1:]
@@ -183,7 +183,8 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 
 		con, err := netpb.Connect(ctx, peer.Address)
 		if err != nil {
-			return errors.Wrap(err, "connecting to peer")
+			nw.logger.Errorw("connecting to mirror peer", "msg", err.Error())
+			continue
 		}
 		netpb.SendPage(int64(recID), data, con.Send)
 
@@ -210,7 +211,7 @@ func (nw *Network) getWithFallback(ctx context.Context, id int, peers []archive.
 	for _, peer := range peers {
 		data, err := nw.getFromPeer(ctx, id, peer.Address)
 		if err != nil {
-			nw.logger.Error(err)
+			nw.logger.Warnw("getting page from peer", "msg", err.Error())
 			continue
 		}
 		return data, nil
@@ -245,8 +246,8 @@ loop:
 			case *netpb.PageTransfer:
 				trans := p.(*netpb.PageTransfer)
 				if !trans.Found {
-					nw.logger.Error("file not found")
-					continue
+					notFound = true
+					break loop
 				}
 				nw.transfers.New(trans)
 			case *netpb.PageChunk:

@@ -40,7 +40,9 @@ func (s *Server) Listen(ctx context.Context) error {
 		case con := <-cons:
 			go s.handle(ctx, con)
 		case err := <-errs:
-			s.logger.Errorw("connection error", "err", err.Error())
+			if err != nil {
+				s.logger.Errorw("connection error", "err", err.Error())
+			}
 		case <-ctx.Done():
 			break
 		}
