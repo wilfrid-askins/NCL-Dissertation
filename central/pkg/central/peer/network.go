@@ -1,8 +1,6 @@
 package peer
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha512"
 	"fmt"
@@ -110,15 +108,11 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 
 	nw.logger.Infow("messaging peers", "id", id)
 
-	//data, err, _ := nw.requestGroup.Do(fmt.Sprintf("network-%d", id), func() (interface{}, error) {
-	//	data, err := nw.getWithFallback(ctx, id, peers)
-	//	return data, err
-	//})
-	data, err := nw.getWithFallback(ctx, id, peers)
-	if err != nil {
-		return nil, errors.Wrap(err, "getting from peers")
-	}
-	bdata := data // (data).([]byte)
+	data, err, _ := nw.requestGroup.Do(fmt.Sprintf("network-get-%d", id), func() (interface{}, error) {
+		data, err := nw.getWithFallback(ctx, snap, peers)
+		return data, err
+	})
+	bdata := (data).([]byte)
 
 	if err := nw.cache.Set(ctx, key, bdata, cacheTime).Err(); err != nil {
 		nw.logger.Errorw("failed to set cache", "msg", err.Error())
@@ -134,32 +128,22 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 	}
 
 	// download url to memory
-	resp, err := http.Get(url)
-	if err != nil {
-		return 0, errors.Wrap(err, "downloading url")
-	}
-	pageData, err := ioutil.ReadAll(resp.Body)
+	respData, err, _ := nw.requestGroup.Do(fmt.Sprintf("http-get-%s", url), func() (interface{}, error) {
+		resp, err := http.Get(url)
+		if err != nil {
+			return 0, errors.Wrap(err, "downloading url")
+		}
+		return ioutil.ReadAll(resp.Body)
+	})
 	if err != nil {
 		return 0, errors.Wrap(err, "reading url data")
 	}
+	data := respData.([]byte)
 
-	// compress page data
-	var comp bytes.Buffer
-	zw := gzip.NewWriter(&comp)
-	if _, err := zw.Write(pageData); err != nil {
-		return 0, errors.Wrap(err, "compressing page data")
+	checkSum, err := getHash(data)
+	if err != nil {
+		return 0, errors.Wrap(err, "calculating hash")
 	}
-	if err := zw.Close(); err != nil {
-		return 0, errors.Wrap(err, "closing compression writer")
-	}
-	data := comp.Bytes()
-
-	// calculate hash of page data
-	hash := sha512.New512_256()
-	if _, err := hash.Write(data); err != nil {
-		return 0, errors.Wrap(err, "writing hash")
-	}
-	checkSum := fmt.Sprintf("%x", hash.Sum(nil))
 
 	// add page record
 	recID, err := nw.records.Add(ctx, archive.Snapshot{
@@ -178,7 +162,7 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 		go func() {
 			nctx, cfn := context.WithTimeout(context.Background(), mirrorTime)
 			defer cfn()
-			if err := nw.sendToMirrors(nctx, int(recID), peerID, comp.Bytes()); err != nil {
+			if err := nw.sendToMirrors(nctx, int(recID), peerID, data); err != nil {
 				nw.logger.Errorw("sending data to mirrors", "id", recID, "err", err.Error())
 			}
 		}()
@@ -190,7 +174,7 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 	}
 	defer con.Close()
 
-	if err := netpb.SendPage(recID, comp.Bytes(), con.Write); err != nil {
+	if err := netpb.SendPage(recID, data, con.Write); err != nil {
 		return 0, errors.Wrap(err, "sending page data")
 	}
 	return int(recID), nil
@@ -232,20 +216,23 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 	return nil
 }
 
-func (nw *Network) getWithFallback(ctx context.Context, id int, peers []archive.Peer) ([]byte, error) {
+func (nw *Network) getWithFallback(ctx context.Context, snap archive.Snapshot, peers []archive.Peer) ([]byte, error) {
 	for _, peer := range peers {
-		data, err := nw.getFromPeer(ctx, id, peer.Address)
+		data, err := nw.getFromPeer(ctx, snap, peer.Address)
 		if err != nil {
 			nw.logger.Warnw("getting page from peer", "msg", err.Error())
 			continue
 		}
 		return data, nil
 	}
+
+	// TODO: get from all peers at once
+
 	return nil, errors.New("none available")
 }
 
-func (nw *Network) getFromPeer(ctx context.Context, id int, address string) ([]byte, error) {
-	nw.logger.Infow("messaging peer", "id", id, "addr", address)
+func (nw *Network) getFromPeer(ctx context.Context, snap archive.Snapshot, address string) ([]byte, error) {
+	nw.logger.Infow("get-file from peer", "id", snap.ID, "addr", address)
 	var notFound bool
 	var result []byte
 
@@ -256,21 +243,23 @@ func (nw *Network) getFromPeer(ctx context.Context, id int, address string) ([]b
 	defer con.Close()
 
 	if err := con.Write(&netpb.PageRequest{
-		Id: int64(id),
+		Id: int64(snap.ID),
 	}); err != nil {
 		return nil, errors.Wrap(err, "sending page request")
 	}
 
 loop:
-	for {
-		select {
-		case p := <-con.Rec:
+	for e := range con.Rec {
+		switch e.Type {
+		case netpb.EventPacket:
+			p := e.Packet
 			switch p.(type) {
 			case *netpb.PageTransfer:
-				nw.logger.Infow("transfer from", "id", id, "addr", address)
+				nw.logger.Infow("get-file transfer start", "id", snap.ID, "addr", address)
 				trans := p.(*netpb.PageTransfer)
 				if !trans.Found {
 					notFound = true
+					con.Close()
 					break loop
 				}
 				nw.transfers.New(trans)
@@ -281,23 +270,35 @@ loop:
 					continue
 				}
 				result = data
+				con.Close()
 				break loop
 			default:
 				nw.logger.Error("unknown packet type received")
 			}
-		case err := <-con.Errs:
+		case netpb.EventError:
 			nw.logger.Errorw("connection returned error", "err", err.Error())
-		case <-ctx.Done():
-			return nil, ctx.Err()
 		}
 	}
-
 	if notFound {
 		return nil, errors.New("not found")
 	}
 
-	// TODO test checksum here
+	checkSum, err := getHash(result)
+	if err != nil {
+		return nil, errors.Wrap(err, "calculating hash")
+	}
+	if snap.Sum != checkSum {
+		return nil, errors.Errorf("wrong hash, want: %s, got: %s", snap.Sum, checkSum)
+	}
 
-	nw.logger.Infow("transfer finished from", "id", id, "addr", address)
+	nw.logger.Infow("get-file transfer end", "id", snap.ID, "addr", address)
 	return result, nil
+}
+
+func getHash(data []byte) (string, error) {
+	hash := sha512.New512_256()
+	if _, err := hash.Write(data); err != nil {
+		return "", errors.Wrap(err, "writing hash")
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }

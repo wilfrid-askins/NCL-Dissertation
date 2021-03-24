@@ -45,15 +45,16 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	s.logger.Infow("getting page", "num", id)
+
+	s.logger.Infow("get", "id", id)
 	page, err := s.group.Get(r.Context(), id)
 	if err != nil {
 		s.logger.Errorw("failed to get page", "msg", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	s.logger.Infow("writing page", "num", id)
 
+	s.logger.Infow("writing page", "id", id)
 	w.Header().Set("Content-Type", "text/pages")
 	w.WriteHeader(http.StatusAccepted)
 	if _, err := w.Write(page); err != nil {
@@ -70,10 +71,11 @@ func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	s.logger.Infow("store", "url", url)
 
 	recID, err := s.group.Store(r.Context(), peerID, url)
 	if err != nil {
-		s.logger.Errorw("failed to store page", "msg", err.Error())
+		s.logger.Errorw("failed to store page", "url", url, "msg", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

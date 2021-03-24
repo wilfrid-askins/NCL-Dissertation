@@ -29,7 +29,6 @@
       "https://www.imperial.ac.uk/",
       "https://www.sheffield.ac.uk/",
       "https://www.lancaster.ac.uk/",
-      "https://www.shu.ac.uk/",
       "https://www.leeds.ac.uk/",
       "https://stepmaths.co.uk/",
       "https://www.theguardian.com/",
@@ -77,6 +76,6 @@
   },
   "nodes": {
     "number": 100,
-    "failures": 25
+    "failures": 20
   }
 }

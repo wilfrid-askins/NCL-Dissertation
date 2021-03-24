@@ -1,7 +1,7 @@
 {
   "name": "Basic Test",
   "store": {
-    "duration": "15s",
+    "duration": "60s",
     "per-second": 3,
     "targets": [
       "https://google.com",
@@ -29,7 +29,6 @@
       "https://www.imperial.ac.uk/",
       "https://www.sheffield.ac.uk/",
       "https://www.lancaster.ac.uk/",
-      "https://www.shu.ac.uk/",
       "https://www.leeds.ac.uk/",
       "https://stepmaths.co.uk/",
       "https://www.theguardian.com/",
@@ -73,7 +72,7 @@
   },
   "get": {
     "duration": "15s",
-    "per-second": 5
+    "per-second": 25
   },
   "nodes": {
     "number": 100,

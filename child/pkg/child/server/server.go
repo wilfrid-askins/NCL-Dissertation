@@ -1,8 +1,6 @@
 package server
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -50,9 +48,10 @@ func (s *Server) Listen(ctx context.Context) error {
 }
 
 func (s *Server) handle(con netpb.Connection) {
-	for {
-		select {
-		case p := <-con.Rec:
+	for e := range con.Rec {
+		switch e.Type {
+		case netpb.EventPacket:
+			p := e.Packet
 			switch p.(type) {
 			case *netpb.PageTransfer:
 				trans := p.(*netpb.PageTransfer)
@@ -73,26 +72,15 @@ func (s *Server) handle(con netpb.Connection) {
 					s.logger.Errorw("failed to read file", "msg", err.Error())
 					continue
 				}
-
-				var comp bytes.Buffer
-				zw := gzip.NewWriter(&comp)
-				if _, err := zw.Write(data); err != nil {
-					s.logger.Errorw("failed to compress file", "msg", err.Error())
-					continue
-				}
-				if err := zw.Close(); err != nil {
-					s.logger.Errorw("failed to close compression", "msg", err.Error())
-					continue
-				}
-				if err := netpb.SendPage(req.Id, comp.Bytes(), con.Write); err != nil {
+				if err := netpb.SendPage(req.Id, data, con.Write); err != nil {
 					s.logger.Errorw("failed to send page", "msg", err.Error())
 					continue
 				}
 			default:
 				s.logger.Error("unknown packet type")
 			}
-		case err := <-con.Errs:
-			s.logger.Errorw("handler error", "err", err.Error())
+		case netpb.EventError:
+			s.logger.Errorw("handler error", "err", e.Error.Error())
 		}
 	}
 }

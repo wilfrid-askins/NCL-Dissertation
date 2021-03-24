@@ -21,6 +21,7 @@ const root = "./tests"
 var tests = []string{
 	"test1",
 	"test2",
+	"test3",
 }
 
 func main() {

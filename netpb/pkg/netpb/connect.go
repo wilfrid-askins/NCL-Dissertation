@@ -8,13 +8,26 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net"
+	"sync"
+)
+
+const (
+	EventPacket = iota
+	EventError
 )
 
 type Connection struct {
-	conn   net.Conn
-	Rec    chan proto.Message
-	Errs   chan error
-	closed bool
+	conn     net.Conn
+	Rec      chan Event
+	closed   bool
+	closedMx sync.Mutex
+	logger   *zap.SugaredLogger
+}
+
+type Event struct {
+	Type   int
+	Packet proto.Message
+	Error  error
 }
 
 func Connect(ctx context.Context, addr string, logger *zap.SugaredLogger) (Connection, error) {
@@ -34,50 +47,69 @@ func (c *Connection) Write(msg proto.Message) error {
 }
 
 func (c *Connection) Close() {
+	c.closedMx.Lock()
+	defer c.closedMx.Unlock()
+	if c.closed {
+		return
+	}
 	c.closed = true
+	//if err := c.conn.Close(); err != nil {
+	//	c.logger.Errorw("closing connection", "msg", err.Error())
+	//}
+	_ = c.conn.Close()
 }
 
 func handle(ctx context.Context, conn net.Conn, logger *zap.SugaredLogger) (Connection, error) {
 	peer := Connection{
-		conn: conn,
-		Rec:  make(chan proto.Message),
-		Errs: make(chan error),
+		conn:   conn,
+		Rec:    make(chan Event),
+		logger: logger,
 	}
 	go func() {
-		defer func() {
-			if err := conn.Close(); err != nil {
-				logger.Errorw("closing connection", "msg", err.Error())
-			}
-			close(peer.Rec)
-			close(peer.Errs)
-		}()
-		for !peer.closed {
+		for {
 			lenB := make([]byte, 8)
 			if _, err := conn.Read(lenB); err != nil {
 				if err == io.EOF {
+					peer.Close()
 					break
 				}
-				peer.Errs <- errors.Wrap(err, "reading length bytes")
+				peer.Rec <- Event{
+					Type:  EventError,
+					Error: errors.Wrap(err, "reading length bytes"),
+				}
 				continue
 			}
 			length, _ := binary.Uvarint(lenB)
 			payload := make([]byte, length)
 			if _, err := conn.Read(payload); err != nil {
-				peer.Errs <- errors.Wrap(err, "reading payload bytes")
+				peer.Rec <- Event{
+					Type:  EventError,
+					Error: errors.Wrap(err, "reading payload bytes"),
+				}
 				continue
 			}
 			pbp := Payload{}
 			if err := proto.Unmarshal(payload, &pbp); err != nil {
-				peer.Errs <- errors.Wrap(err, "unmarshalling payload message")
+				peer.Rec <- Event{
+					Type:  EventError,
+					Error: errors.Wrap(err, "unmarshalling payload message"),
+				}
 				continue
 			}
 			realMsg, err := unwrap(&pbp)
 			if err != nil {
-				peer.Errs <- errors.Wrap(err, "unwrapping proto")
+				peer.Rec <- Event{
+					Type:  EventError,
+					Error: errors.Wrap(err, "unwrapping proto"),
+				}
 				continue
 			}
-			peer.Rec <- realMsg
+			peer.Rec <- Event{
+				Type:   EventPacket,
+				Packet: realMsg,
+			}
 		}
+		close(peer.Rec)
 	}()
 
 	go func() {

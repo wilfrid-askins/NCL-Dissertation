@@ -70,7 +70,17 @@ func (tr *Transfer) Push(chunk *PageChunk) (bool, []byte) {
 	return false, nil
 }
 
-func SendPage(reqID int64, data []byte, send func(proto.Message) error) error {
+func SendPage(reqID int64, pageData []byte, send func(proto.Message) error) error {
+	var comp bytes.Buffer
+	zw := gzip.NewWriter(&comp)
+	if _, err := zw.Write(pageData); err != nil {
+		return errors.Wrap(err, "compressing data")
+	}
+	if err := zw.Close(); err != nil {
+		return errors.Wrap(err, "closing compression writer")
+	}
+	data := comp.Bytes()
+
 	chunkNum := divRoundUp(len(data), chunkSize)
 	if err := send(&PageTransfer{
 		Id:        reqID,
