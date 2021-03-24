@@ -69,7 +69,7 @@ func main() {
 }
 
 func writeResult(testName string, data []byte) {
-	fileName := fmt.Sprintf("%s-%s.xlsx", testName, time.Now().Format("2006-01-02T15:04:05"))
+	fileName := fmt.Sprintf("%s-%s.xlsx", testName, time.Now().Format("2006-01-02T15-04-05"))
 	fo, err := os.Create(fileName)
 	if err != nil {
 		panic(err)
