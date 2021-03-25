@@ -15,7 +15,7 @@ func Serve(ctx context.Context, port int, logger *zap.SugaredLogger) (chan Conne
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to handle on port")
+		return nil, nil, errors.Wrapf(err, "failed to handle on port %d", port)
 	}
 
 	go func() {

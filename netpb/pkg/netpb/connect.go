@@ -34,7 +34,7 @@ func Connect(ctx context.Context, addr string, logger *zap.SugaredLogger) (Conne
 	dail := net.Dialer{}
 	conn, err := dail.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return Connection{}, errors.Wrap(err, "dialing address")
+		return Connection{}, errors.Wrapf(err, "dialing address %s", addr)
 	}
 	return handle(ctx, conn, logger)
 }
