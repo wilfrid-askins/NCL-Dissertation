@@ -1,7 +1,7 @@
 {
   "name": "Working test",
   "store": {
-    "duration": "60s",
+    "duration": "10s",
     "per-second": 3,
     "targets": [
       "https://google.com",
@@ -75,7 +75,7 @@
     "per-second": 20
   },
   "nodes": {
-    "number": 100,
+    "number": 20,
     "failures": 0
   }
 }
