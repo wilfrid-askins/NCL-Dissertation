@@ -31,8 +31,8 @@ type Event struct {
 }
 
 func Connect(ctx context.Context, addr string, logger *zap.SugaredLogger) (Connection, error) {
-	dail := net.Dialer{}
-	conn, err := dail.DialContext(ctx, "tcp", addr)
+	dial := net.Dialer{}
+	conn, err := dial.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return Connection{}, errors.Wrapf(err, "dialing address %s", addr)
 	}
