@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"wilfrid.me/archive-central/pkg/central/peer"
+	"wilfrid.me/archive-central/pkg/central/record"
+	"wilfrid.me/netpb/pkg/archive"
 )
 
 //go:embed pages/store.html
@@ -17,14 +19,16 @@ var storeForm []byte
 var registerForm []byte
 
 type Server struct {
-	group  peer.Group
-	logger *zap.SugaredLogger
+	group   peer.Group
+	records record.Repository
+	logger  *zap.SugaredLogger
 }
 
-func NewServer(group peer.Group, logger *zap.SugaredLogger) *Server {
+func NewServer(group peer.Group, records record.Repository, logger *zap.SugaredLogger) *Server {
 	return &Server{
-		group:  group,
-		logger: logger,
+		group:   group,
+		records: records,
+		logger:  logger,
 	}
 }
 
@@ -32,6 +36,7 @@ func (s *Server) GetRouter() *chi.Mux {
 	router := chi.NewMux()
 	router.Get("/api/page/{id}", s.GetPage)
 	router.Get("/api/store", s.StorePage)
+	router.Get("/api/register", s.RegisterPeer)
 	router.Get("/store", s.staticPage(storeForm))
 	router.Get("/register", s.staticPage(registerForm))
 	return router
@@ -85,6 +90,27 @@ func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	if _, err := w.Write(resp); err != nil {
 		s.logger.Errorw("failed to write page data", "msg", err.Error())
+	}
+}
+
+func (s *Server) RegisterPeer(w http.ResponseWriter, r *http.Request) {
+	address := r.URL.Query().Get("address")
+	s.logger.Infow("register", "address", address)
+
+	recID, err := s.records.AddPeer(r.Context(), archive.Peer{
+		Address: address,
+	})
+	if err != nil {
+		s.logger.Errorw("failed to register peer", "address", address, "msg", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	resp := []byte(fmt.Sprintf("%d", recID))
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	if _, err := w.Write(resp); err != nil {
+		s.logger.Errorw("failed to write register response", "msg", err.Error())
 	}
 }
 
