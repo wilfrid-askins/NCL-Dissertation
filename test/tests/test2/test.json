@@ -71,12 +71,12 @@
     ]
   },
   "get": {
-    "duration": "10s",
-    "per-second": 10
+    "duration": "50s",
+    "per-second": 2
   },
   "peers": {
     "number": 100,
-    "failures": 20
+    "failures": 70
   },
   "internal": {
     "target": "localhost:25565"

@@ -208,7 +208,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 
 func getResult(start time.Time, job Job) ResultRow {
 	client := http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 20 * time.Second,
 	}
 	rowVal := ResultRow{}
 	startReq := time.Now()
@@ -320,7 +320,7 @@ func getFailures(nodes, fails int) map[int]bool {
 	failCount := 0
 	failures := make(map[int]bool)
 	for failCount < fails {
-		ind := rand.Intn(nodes) + 1
+		ind := rand.Intn(nodes)
 		if failures[ind] {
 			continue
 		}

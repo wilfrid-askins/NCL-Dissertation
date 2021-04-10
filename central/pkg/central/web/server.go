@@ -86,6 +86,7 @@ func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := []byte(fmt.Sprintf("%d", recID))
 
+	s.logger.Infow("stored", "url", url)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	if _, err := w.Write(resp); err != nil {
