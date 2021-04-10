@@ -49,6 +49,10 @@ func LoadConfig() Config {
 		panic(err)
 	}
 
+	// TODO: Next steps
+	// check environment variable first for consul config
+	// then try default url
+
 	kv, _, err := client.KV().Get("archive/config", &api.QueryOptions{})
 	if err != nil {
 		panic(err)
