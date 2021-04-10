@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-const chunkSize = 10_000
+const chunkSize = 730
 
 type (
 	Transfer struct {
