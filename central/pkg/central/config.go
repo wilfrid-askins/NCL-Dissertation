@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/hashicorp/consul/api"
+	"os"
 )
+
+const consulEnv = "CONSUL_ADDRESS"
 
 type (
 	Config struct {
@@ -44,14 +47,21 @@ func (d Database) DatasourceAddress() string {
 }
 
 func LoadConfig() Config {
-	client, err := api.NewClient(api.DefaultConfig())
+	var consulConf *api.Config
+	if url, pres := os.LookupEnv(consulEnv); pres {
+		consulConf = &api.Config{
+			Address: url,
+			Scheme:  "http",
+		}
+	} else {
+		// use address 127.0.0.1:8500
+		consulConf = api.DefaultConfig()
+	}
+
+	client, err := api.NewClient(consulConf)
 	if err != nil {
 		panic(err)
 	}
-
-	// TODO: Next steps
-	// check environment variable first for consul config
-	// then try default url
 
 	kv, _, err := client.KV().Get("archive/config", &api.QueryOptions{})
 	if err != nil {

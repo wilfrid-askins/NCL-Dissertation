@@ -83,7 +83,9 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	// check cache
 	key := fmt.Sprintf("snapshot-%d", id)
-	cached, err := nw.cache.Get(ctx, key).Bytes()
+	sctx, cfn := context.WithTimeout(ctx, time.Second*2)
+	defer cfn()
+	cached, err := nw.cache.Get(sctx, key).Bytes()
 	if err != nil && err != redis.Nil {
 		nw.logger.Errorw("failed to query cache", "msg", err.Error())
 	}
@@ -112,6 +114,9 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 		data, err := nw.getWithFallback(ctx, snap, peers)
 		return data, err
 	})
+	if err != nil {
+		return nil, errors.Wrap(err, "messaging peers")
+	}
 	bdata := (data).([]byte)
 
 	if err := nw.cache.Set(ctx, key, bdata, cacheTime).Err(); err != nil {
@@ -220,12 +225,11 @@ func (nw *Network) getWithFallback(ctx context.Context, snap archive.Snapshot, p
 	for _, peer := range peers {
 		data, err := nw.getFromPeer(ctx, snap, peer.Address)
 		if err != nil {
-			nw.logger.Warnw("getting page from peer", "msg", err.Error())
-			continue
+			nw.logger.Warnw("couldn't get from peer", "addr", peer.Address, "msg", err.Error())
 		}
+
 		return data, nil
 	}
-
 	// TODO: get from all peers at once
 
 	return nil, errors.New("none available")
@@ -276,7 +280,7 @@ loop:
 				nw.logger.Error("unknown packet type received")
 			}
 		case netpb.EventError:
-			nw.logger.Errorw("connection returned error", "err", err.Error())
+			nw.logger.Errorw("connection returned error", "err", e.Error.Error())
 		}
 	}
 	if notFound {
