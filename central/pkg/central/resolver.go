@@ -73,7 +73,7 @@ func (re *Resolver) WebServer() *web.Server {
 	if re.server != nil {
 		return re.server
 	}
-	re.server = web.NewServer(re.Group(), re.Logger())
+	re.server = web.NewServer(re.Group(), re.Records(), re.Logger())
 	return re.server
 }
 
