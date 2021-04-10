@@ -74,8 +74,11 @@
     "duration": "10s",
     "per-second": 10
   },
-  "nodes": {
+  "peers": {
     "number": 100,
     "failures": 20
+  },
+  "internal": {
+    "target": "localhost:25565"
   }
 }

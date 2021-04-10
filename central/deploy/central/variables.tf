@@ -25,5 +25,5 @@ variable "zone" {
 variable "docker-image" {
   type        = string
   description = "central server docker image"
-  default     = "gcr.io/ultra-zenith-309512/central-app:v1"
+  default     = "gcr.io/ultra-zenith-309512/central-app:latest"
 }

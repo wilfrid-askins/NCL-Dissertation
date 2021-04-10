@@ -2,6 +2,7 @@ package tester
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/tealeg/xlsx"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 	"wilfrid.me/archive-central/pkg/central"
+	"wilfrid.me/archive-central/pkg/central/record"
 	"wilfrid.me/archive-child/pkg/child"
 	"wilfrid.me/netpb/pkg/archive"
 )
@@ -28,21 +30,32 @@ type (
 			Duration  string `json:"duration"`
 			PerSecond int    `json:"per-second"`
 		} `json:"get"`
-		Nodes struct {
+		Peers struct {
 			Number   int `json:"number"`
 			Failures int `json:"failures"`
-		} `json:"nodes"`
+		} `json:"peers"`
+		External struct {
+			Use           bool   `json:"use"`
+			TargetAddress string `json:"target-address"`
+			LocalAddress  string `json:"local-address"`
+		} `json:"external"`
+		Internal struct {
+			Target string `json:"target"`
+		}
 	}
 
 	Tester struct {
-		central     *central.Resolver
-		peers       []archive.Peer
-		peerCancels map[int]context.CancelFunc
-		Sheet       *xlsx.Sheet
-		logger      *zap.SugaredLogger
-		centErrs    <-chan error
-		peerErrs    <-chan error
-		config      Config
+		records       record.Repository
+		db            *sql.DB
+		peers         []archive.Peer
+		peerCancels   map[int]context.CancelFunc
+		localAddress  string
+		targetAddress string
+		Sheet         *xlsx.Sheet
+		logger        *zap.SugaredLogger
+		centErrs      <-chan error
+		peerErrs      <-chan error
+		config        Config
 	}
 
 	Job struct {
@@ -67,7 +80,8 @@ type (
 func New(ctx context.Context, config Config, centralConfig central.Config, logger *zap.SugaredLogger) (*Tester, error) {
 	ts := &Tester{config: config, logger: logger}
 
-	ts.central, ts.centErrs = ts.createCentral(ctx, centralConfig)
+	ts.initAddresses(config)
+	ts.records, ts.db, ts.centErrs = ts.createCentral(ctx, config, centralConfig)
 	ts.peers, ts.peerCancels, ts.peerErrs = ts.createPeers(ctx)
 
 	f := xlsx.NewFile()
@@ -135,7 +149,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 		}()
 	}
 
-	peers, err := ts.central.Records().GetPeers(ctx, -1)
+	peers, err := ts.records.GetPeers(ctx, -1)
 	if err != nil {
 		return errors.Wrap(err, "querying peers")
 	}
@@ -147,7 +161,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 		url := ts.config.Store.Targets[totalStores%len(ts.config.Store.Targets)]
 		pid := peers[totalStores%len(peers)].ID
 		jobs <- Job{
-			target:  fmt.Sprintf("http://localhost:25565/api/store?url=%s&peer=%d", url, pid),
+			target:  fmt.Sprintf("http://%s/api/store?url=%s&peer=%d", ts.targetAddress, url, pid),
 			execAt:  time.Now().Add(i),
 			reqType: "store",
 		}
@@ -157,13 +171,13 @@ func (ts *Tester) Execute(ctx context.Context) error {
 	ts.logger.Info("waiting for store jobs")
 	wg.Wait()
 
-	snaps, err := ts.central.Records().All(ctx)
+	snaps, err := ts.records.All(ctx)
 	if err != nil {
 		return errors.Wrap(err, "querying snapshots")
 	}
 
 	// shutdown 'failed' nodes
-	failures := getFailures(ts.config.Nodes.Number, ts.config.Nodes.Failures)
+	failures := getFailures(ts.config.Peers.Number, ts.config.Peers.Failures)
 	for key, val := range failures {
 		if !val {
 			continue
@@ -178,7 +192,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 	for i := time.Duration(0); i < getDuration; i += getGap {
 		sid := snaps[totalGets%len(snaps)].ID
 		jobs <- Job{
-			target:  fmt.Sprintf("http://localhost:25565/api/page/%d", sid),
+			target:  fmt.Sprintf("http://%s/api/page/%d", ts.targetAddress, sid),
 			execAt:  time.Now().Add(i),
 			reqType: "get",
 		}
@@ -231,14 +245,14 @@ func (ts *Tester) initTables(ctx context.Context) error {
 		"SET FOREIGN_KEY_CHECKS = 1;",
 	}
 	for _, cmd := range cmds {
-		_, err := ts.central.Database().ExecContext(ctx, cmd)
+		_, err := ts.db.ExecContext(ctx, cmd)
 		if err != nil {
 			return errors.Wrap(err, "running db cmd")
 		}
 	}
 	// add peers to database
 	for _, p := range ts.peers {
-		_, err := ts.central.Records().AddPeer(ctx, p)
+		_, err := ts.records.AddPeer(ctx, p)
 		if err != nil {
 			return errors.Wrap(err, "creating peer")
 		}
@@ -246,17 +260,31 @@ func (ts *Tester) initTables(ctx context.Context) error {
 	return nil
 }
 
-func (ts *Tester) createCentral(ctx context.Context, config central.Config) (*central.Resolver, <-chan error) {
-	node := central.NewResolver(config)
-	ws := node.WebServer()
-	port := fmt.Sprintf(":%d", config.Server.Port)
+func (ts *Tester) initAddresses(config Config) {
+	if config.External.Use {
+		ts.localAddress = config.External.LocalAddress
+		ts.targetAddress = config.External.TargetAddress
+		return
+	}
+	ts.localAddress = "localhost"
+	ts.targetAddress = config.Internal.Target
+}
+
+func (ts *Tester) createCentral(_ context.Context, config Config, centConfig central.Config) (record.Repository, *sql.DB, <-chan error) {
+	cent := central.NewResolver(centConfig)
 	errs := make(chan error)
-	go func() {
-		if err := http.ListenAndServe(port, ws.GetRouter()); err != nil {
-			errs <- errors.Wrap(err, "http server listening")
-		}
-	}()
-	return node, errs
+
+	if !config.External.Use {
+		ws := cent.WebServer()
+		port := fmt.Sprintf(":%d", centConfig.Server.Port)
+		errs := make(chan error)
+		go func() {
+			if err := http.ListenAndServe(port, ws.GetRouter()); err != nil {
+				errs <- errors.Wrap(err, "http server listening")
+			}
+		}()
+	}
+	return cent.Records(), cent.Database(), errs
 }
 
 func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]context.CancelFunc, <-chan error) {
@@ -267,7 +295,7 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]cont
 	peerCancels := make(map[int]context.CancelFunc)
 	errs := make(chan error)
 
-	for i := 0; i < ts.config.Nodes.Number; i++ {
+	for i := 0; i < ts.config.Peers.Number; i++ {
 		port := portStart + i
 		res := child.NewResolver(child.Config{
 			Port:      port,
@@ -275,7 +303,7 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]cont
 		})
 		peers = append(peers, archive.Peer{
 			ID:      i,
-			Address: fmt.Sprintf("localhost:%d", port),
+			Address: fmt.Sprintf("%s:%d", ts.localAddress, port),
 		})
 		nctx, cfn := context.WithCancel(ctx)
 		peerCancels[i] = cfn
