@@ -23,13 +23,16 @@ resource "kubernetes_deployment" "app" {
       }
 
       spec {
-        // service_account_name = google_service_account.default.account_id
         container {
           image = var.docker-image
           name  = var.app
           port {
-            name           = "port-5000"
-            container_port = 5000
+            name           = "port-8080"
+            container_port = 8080
+          }
+          env {
+            name = "CONSUL_ADDRESS"
+            value = "35.189.117.7:8500"
           }
         }
       }
