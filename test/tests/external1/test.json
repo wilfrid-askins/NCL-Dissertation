@@ -1,8 +1,8 @@
 {
   "name": "External Test",
   "store": {
-    "duration": "10s",
-    "per-second": 1,
+    "duration": "30s",
+    "per-second": 5,
     "targets": [
       "https://google.com",
       "https://youtube.com",
@@ -71,11 +71,11 @@
     ]
   },
   "get": {
-    "duration": "10s",
-    "per-second": 1
+    "duration": "30s",
+    "per-second": 10
   },
   "peers": {
-    "number": 10,
+    "number": 100,
     "failures": 0
   },
   "external": {
