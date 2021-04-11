@@ -318,7 +318,7 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]Canc
 	}
 	return peers, peerCancels, errs
 }
-cd
+
 func getFailures(nodes, fails int) map[int]bool {
 	failCount := 0
 	failures := make(map[int]bool)
