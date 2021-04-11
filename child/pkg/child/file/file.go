@@ -5,7 +5,6 @@ import (
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"os"
-	"wilfrid.me/netpb/pkg/archive"
 )
 
 type Repository struct {
@@ -24,10 +23,9 @@ func NewRepository(storePath string) (*Repository, error) {
 }
 
 func (r *Repository) Get(id int) ([]byte, error) {
-	// check cache for snapshot data
-	// read snapshot data from file
-	// return data
+	// decide where data was stored
 	path := fmt.Sprintf("%s%d.html", r.storePath, id)
+	// read snapshot data from file
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading file")
@@ -36,12 +34,8 @@ func (r *Repository) Get(id int) ([]byte, error) {
 }
 
 func (r *Repository) Store(id int, data []byte) error {
-	// create file of s
+	// decide file for data
 	path := fmt.Sprintf("%s%d.html", r.storePath, id)
 	// write data to file
 	return ioutil.WriteFile(path, data, os.ModePerm)
-}
-
-func fileName(s archive.Snapshot) string {
-	return fmt.Sprintf("%d", s.ID)
 }

@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha512"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"golang.org/x/sync/singleflight"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 	"wilfrid.me/archive-central/pkg/central/record"
@@ -173,15 +175,10 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 		}()
 	}
 
-	con, err := netpb.Connect(ctx, peer.Address, nw.logger)
-	if err != nil {
-		return 0, errors.Wrap(err, "connecting to peer")
+	if err := sendTo(ctx, peer.Address, int(recID), data); err != nil {
+		return 0, errors.Wrap(err, "sending to main peer")
 	}
-	defer con.Close()
 
-	if err := netpb.SendPage(recID, data, con.Write); err != nil {
-		return 0, errors.Wrap(err, "sending page data")
-	}
 	return int(recID), nil
 }
 
@@ -198,13 +195,8 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 			continue
 		}
 
-		con, err := netpb.Connect(ctx, peer.Address, nw.logger)
-		if err != nil {
-			nw.logger.Errorw("connecting to mirror peer", "msg", err.Error())
-			continue
-		}
-		if err := netpb.SendPage(int64(recID), data, con.Write); err != nil {
-			nw.logger.Errorw("sending page", "msg", err.Error())
+		if err := sendTo(ctx, peer.Address, recID, data); err != nil {
+			nw.logger.Errorw("sending to mirror", "msg", err.Error())
 			continue
 		}
 
@@ -213,7 +205,6 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 			continue
 		}
 		needed--
-		con.Close()
 	}
 	if needed > 0 {
 		return errors.New("failed to find enough available peers")
@@ -223,7 +214,7 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 
 func (nw *Network) getWithFallback(ctx context.Context, snap archive.Snapshot, peers []archive.Peer) ([]byte, error) {
 	for _, peer := range peers {
-		data, err := nw.getFromPeer(ctx, snap, peer.Address)
+		data, err := nw.getFrom(ctx, snap, peer.Address)
 		if err != nil {
 			nw.logger.Warnw("couldn't get from peer", "addr", peer.Address, "msg", err.Error())
 		}
@@ -235,56 +226,27 @@ func (nw *Network) getWithFallback(ctx context.Context, snap archive.Snapshot, p
 	return nil, errors.New("none available")
 }
 
-func (nw *Network) getFromPeer(ctx context.Context, snap archive.Snapshot, address string) ([]byte, error) {
-	nw.logger.Infow("get-file from peer", "id", snap.ID, "addr", address)
-	var notFound bool
-	var result []byte
+func (nw *Network) getFrom(ctx context.Context, snap archive.Snapshot, address string) ([]byte, error) {
+	nw.logger.Infow("getting file from peer", "id", snap.ID, "addr", address)
 
-	con, err := netpb.Connect(ctx, address, nw.logger)
+	target := fmt.Sprintf("%s%s", address, "/find")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "connecting to peer")
+		return nil, errors.Wrap(err, "making request")
 	}
-	defer con.Close()
+	req.Header.Set("id", strconv.Itoa(snap.ID))
 
-	if err := con.Write(&netpb.PageRequest{
-		Id: int64(snap.ID),
-	}); err != nil {
-		return nil, errors.Wrap(err, "sending page request")
+	client := http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "sending request")
 	}
-
-loop:
-	for e := range con.Rec {
-		switch e.Type {
-		case netpb.EventPacket:
-			p := e.Packet
-			switch p.(type) {
-			case *netpb.PageTransfer:
-				nw.logger.Infow("get-file transfer start", "id", snap.ID, "addr", address)
-				trans := p.(*netpb.PageTransfer)
-				if !trans.Found {
-					notFound = true
-					con.Close()
-					break loop
-				}
-				nw.transfers.New(trans)
-			case *netpb.PageChunk:
-				chunk := p.(*netpb.PageChunk)
-				done, data := nw.transfers.Push(chunk)
-				if !done {
-					continue
-				}
-				result = data
-				con.Close()
-				break loop
-			default:
-				nw.logger.Error("unknown packet type received")
-			}
-		case netpb.EventError:
-			nw.logger.Errorw("connection returned error", "err", e.Error.Error())
-		}
+	if resp.StatusCode != http.StatusAccepted {
+		return nil, errors.New("file not found")
 	}
-	if notFound {
-		return nil, errors.New("not found")
+	result, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "making request")
 	}
 
 	checkSum, err := getHash(result)
@@ -295,8 +257,27 @@ loop:
 		return nil, errors.Errorf("wrong hash, want: %s, got: %s", snap.Sum, checkSum)
 	}
 
-	nw.logger.Infow("get-file transfer end", "id", snap.ID, "addr", address)
+	nw.logger.Infow("got file from peer", "id", snap.ID, "addr", address)
 	return result, nil
+}
+
+func sendTo(ctx context.Context, address string, id int, data []byte) error {
+	target := fmt.Sprintf("%s%s", address, "/store")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(data))
+	if err != nil {
+		return errors.Wrap(err, "making request")
+	}
+	req.Header.Set("id", strconv.Itoa(id))
+
+	client := http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "sending request")
+	}
+	if resp.StatusCode != http.StatusAccepted {
+		return errors.New("file not accepted")
+	}
+	return nil
 }
 
 func getHash(data []byte) (string, error) {

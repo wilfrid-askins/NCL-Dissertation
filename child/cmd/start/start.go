@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"os"
 	"wilfrid.me/archive-child/pkg/child"
 )
@@ -17,7 +16,7 @@ func main() {
 		StorePath: path + "/store",
 	}
 	resolver := child.NewResolver(config)
-	if err := resolver.Server().Listen(context.Background()); err != nil {
+	if err := resolver.Server().Listen(); err != nil {
 		panic(err.Error())
 	}
 }
