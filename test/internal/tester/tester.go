@@ -48,7 +48,7 @@ type (
 		records       record.Repository
 		db            *sql.DB
 		peers         []archive.Peer
-		peerCancels   map[int]context.CancelFunc
+		peerCancels   map[int]CancelFunc
 		localAddress  string
 		targetAddress string
 		Sheet         *xlsx.Sheet
@@ -75,6 +75,8 @@ type (
 		ReadError   string  `xlsx:"8"`
 		DataSize    int     `xlsx:"9"`
 	}
+
+	CancelFunc func(ctx context.Context) error
 )
 
 func New(ctx context.Context, config Config, centralConfig central.Config, logger *zap.SugaredLogger) (*Tester, error) {
@@ -183,7 +185,9 @@ func (ts *Tester) Execute(ctx context.Context) error {
 			continue
 		}
 		cfn := ts.peerCancels[key]
-		cfn()
+		if err := cfn(ctx); err != nil {
+			ts.logger.Errorw("failed to shutdown peer", "err", err.Error())
+		}
 	}
 
 	ts.logger.Info("queueing get jobs")
@@ -208,7 +212,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 
 func getResult(start time.Time, job Job) ResultRow {
 	client := http.Client{
-		Timeout: 20 * time.Second,
+		Timeout: 10 * time.Second,
 	}
 	rowVal := ResultRow{}
 	startReq := time.Now()
@@ -266,7 +270,7 @@ func (ts *Tester) initAddresses(config Config) {
 		ts.targetAddress = config.External.TargetAddress
 		return
 	}
-	ts.localAddress = "localhost"
+	ts.localAddress = "0.0.0.0"
 	ts.targetAddress = config.Internal.Target
 }
 
@@ -287,12 +291,12 @@ func (ts *Tester) createCentral(_ context.Context, config Config, centConfig cen
 	return cent.Records(), cent.Database(), errs
 }
 
-func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]context.CancelFunc, <-chan error) {
+func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]CancelFunc, <-chan error) {
 	storePath := "./store"
 	portStart := 25566
 	// portEnd := 30000
 	var peers []archive.Peer
-	peerCancels := make(map[int]context.CancelFunc)
+	peerCancels := make(map[int]CancelFunc)
 	errs := make(chan error)
 
 	for i := 0; i < ts.config.Peers.Number; i++ {
@@ -305,17 +309,16 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]cont
 			ID:      i,
 			Address: fmt.Sprintf("%s:%d", ts.localAddress, port),
 		})
-		nctx, cfn := context.WithCancel(ctx)
-		peerCancels[i] = cfn
-		go func(nctx context.Context, port int) {
-			if err := res.Server().Listen(nctx); err != nil {
+		peerCancels[i] = res.Server().Shutdown
+		go func(res *child.Resolver, port int) {
+			if err := res.Server().Listen(); err != nil {
 				errs <- errors.Wrapf(err, "failed to listen on port %d", port)
 			}
-		}(nctx, port)
+		}(res, port)
 	}
 	return peers, peerCancels, errs
 }
-
+cd
 func getFailures(nodes, fails int) map[int]bool {
 	failCount := 0
 	failures := make(map[int]bool)

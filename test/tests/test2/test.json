@@ -79,6 +79,6 @@
     "failures": 70
   },
   "internal": {
-    "target": "localhost:25565"
+    "target": "http://localhost:25565"
   }
 }

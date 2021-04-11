@@ -1,7 +1,7 @@
 {
   "name": "Basic Test",
   "store": {
-    "duration": "60s",
+    "duration": "10s",
     "per-second": 3,
     "targets": [
       "https://google.com",
@@ -71,14 +71,14 @@
     ]
   },
   "get": {
-    "duration": "15s",
-    "per-second": 25
+    "duration": "3s",
+    "per-second": 10
   },
   "peers": {
     "number": 100,
     "failures": 0
   },
   "internal": {
-    "target": "localhost:25565"
+    "target": "0.0.0.0:25565"
   }
 }

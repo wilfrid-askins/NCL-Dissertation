@@ -2,6 +2,7 @@ package peer
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha512"
 	"fmt"
@@ -110,11 +111,10 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	peers = append(peers, snap.Peer)
 	peers = append(peers, mirrors...)
 
-	nw.logger.Infow("messaging peers", "id", id)
+	nw.logger.Infow("messaging peers", "snap", snap)
 
 	data, err, _ := nw.requestGroup.Do(fmt.Sprintf("network-get-%d", id), func() (interface{}, error) {
-		data, err := nw.getWithFallback(ctx, snap, peers)
-		return data, err
+		return nw.getWithFallback(ctx, snap, peers)
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "messaging peers")
@@ -122,7 +122,7 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	bdata := (data).([]byte)
 
 	if err := nw.cache.Set(ctx, key, bdata, cacheTime).Err(); err != nil {
-		nw.logger.Errorw("failed to set cache", "msg", err.Error())
+		nw.logger.Errorw("failed to set cache", "snap", snap, "msg", err.Error())
 	}
 	return bdata, nil
 }
@@ -191,6 +191,7 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 	for needed > 0 && len(peers) > 0 {
 		peer := peers[0]
 		peers = peers[1:]
+		// skip main peer as this wil already be stored
 		if peer.ID == exID {
 			continue
 		}
@@ -216,20 +217,19 @@ func (nw *Network) getWithFallback(ctx context.Context, snap archive.Snapshot, p
 	for _, peer := range peers {
 		data, err := nw.getFrom(ctx, snap, peer.Address)
 		if err != nil {
-			nw.logger.Warnw("couldn't get from peer", "addr", peer.Address, "msg", err.Error())
+			nw.logger.Warnw("couldn't get from peer", "snap", snap, "addr", peer.Address, "msg", err.Error())
+			continue
 		}
-
 		return data, nil
 	}
 	// TODO: get from all peers at once
-
 	return nil, errors.New("none available")
 }
 
 func (nw *Network) getFrom(ctx context.Context, snap archive.Snapshot, address string) ([]byte, error) {
-	nw.logger.Infow("getting file from peer", "id", snap.ID, "addr", address)
+	nw.logger.Infow("getting file from peer", "snap", snap, "addr", address)
 
-	target := fmt.Sprintf("%s%s", address, "/find")
+	target := fmt.Sprintf("http://%s%s", address, "/get")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "making request")
@@ -241,12 +241,20 @@ func (nw *Network) getFrom(ctx context.Context, snap archive.Snapshot, address s
 	if err != nil {
 		return nil, errors.Wrap(err, "sending request")
 	}
-	if resp.StatusCode != http.StatusAccepted {
+	if resp.StatusCode == http.StatusNotFound {
 		return nil, errors.New("file not found")
 	}
-	result, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("request not successful")
+	}
+	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "making request")
+	}
+
+	result, err := decompress(data)
+	if err != nil {
+		return nil, errors.Wrap(err, "decompressing file")
 	}
 
 	checkSum, err := getHash(result)
@@ -257,12 +265,16 @@ func (nw *Network) getFrom(ctx context.Context, snap archive.Snapshot, address s
 		return nil, errors.Errorf("wrong hash, want: %s, got: %s", snap.Sum, checkSum)
 	}
 
-	nw.logger.Infow("got file from peer", "id", snap.ID, "addr", address)
+	nw.logger.Infow("got file from peer", "snap", snap, "addr", address)
 	return result, nil
 }
 
-func sendTo(ctx context.Context, address string, id int, data []byte) error {
-	target := fmt.Sprintf("%s%s", address, "/store")
+func sendTo(ctx context.Context, address string, id int, file []byte) error {
+	data, err := compress(file)
+	if err != nil {
+		return errors.Wrap(err, "compressing file")
+	}
+	target := fmt.Sprintf("http://%s%s", address, "/store")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(data))
 	if err != nil {
 		return errors.Wrap(err, "making request")
@@ -274,10 +286,34 @@ func sendTo(ctx context.Context, address string, id int, data []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "sending request")
 	}
-	if resp.StatusCode != http.StatusAccepted {
+	if resp.StatusCode != http.StatusOK {
 		return errors.New("file not accepted")
 	}
 	return nil
+}
+
+func compress(file []byte) ([]byte, error) {
+	var comp bytes.Buffer
+	zw := gzip.NewWriter(&comp)
+	if _, err := zw.Write(file); err != nil {
+		return nil, errors.Wrap(err, "compressing data")
+	}
+	if err := zw.Close(); err != nil {
+		return nil, errors.Wrap(err, "closing compression writer")
+	}
+	return comp.Bytes(), nil
+}
+
+func decompress(data []byte) ([]byte, error) {
+	r, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating reader")
+	}
+	res, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading data")
+	}
+	return res, nil
 }
 
 func getHash(data []byte) (string, error) {
