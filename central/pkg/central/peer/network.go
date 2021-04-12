@@ -6,85 +6,47 @@ import (
 	"context"
 	"crypto/sha512"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"strconv"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
-	"io/ioutil"
-	"net/http"
-	"strconv"
-	"sync"
-	"time"
+	"wilfrid.me/archive-central/pkg/central/core"
 	"wilfrid.me/archive-central/pkg/central/record"
-	"wilfrid.me/netpb/pkg/archive"
-	"wilfrid.me/netpb/pkg/netpb"
 )
 
 const (
 	cacheTime      = time.Hour
-	searchFactor   = 4
+	mirrorAttempts = 4
 	mirrorTime     = time.Minute * 2
-	firstCacheTime = time.Minute * 10
 )
 
-type (
-	Network struct {
-		records      record.Repository
-		firstCache   map[int]*cached
-		firstCacheMx sync.RWMutex
-		cache        *redis.Client
-		transfers    *netpb.Transfer
-		requestGroup singleflight.Group
-		logger       *zap.SugaredLogger
-		mirrors      int
-	}
+// Network describes a peer group which communicates over a network.
+type Network struct {
+	records      record.Repository
+	cache        *redis.Client
+	requestGroup singleflight.Group
+	logger       *zap.SugaredLogger
+	mirrors      int
+}
 
-	cached struct {
-		data []byte
-		age  time.Time
-	}
-)
-
+// NewNetwork returns a network instance which uses the specified records repository and cache.
 func NewNetwork(records record.Repository, cache *redis.Client, mirrors int, logger *zap.SugaredLogger) *Network {
 	return &Network{
-		records:      records,
-		firstCache:   make(map[int]*cached),
-		firstCacheMx: sync.RWMutex{},
-		cache:        cache,
-		transfers:    netpb.NewTransfer(logger),
-		mirrors:      mirrors,
-		logger:       logger,
+		records: records,
+		cache:   cache,
+		mirrors: mirrors,
+		logger:  logger,
 	}
 }
 
-/*
+// Get returns the file of the page with the specified id.
 func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
-	//nw.firstCacheMx.RLock()
-	//defer nw.firstCacheMx.RUnlock()
-	//if cached, pres := nw.firstCache[id]; pres {
-	//	nw.logger.Info("first cache hit")
-	//	cached.age = time.Now()
-	//	return cached.data, nil
-	//}
-
-	data, err, _ := nw.requestGroup.Do(fmt.Sprintf("page-%d", id), func() (interface{}, error) {
-		data, err := nw.getWork(ctx, id)
-		return data, err
-	})
-	bdata := (data).([]byte)
-
-	//nw.firstCacheMx.Lock()
-	//defer nw.firstCacheMx.Unlock()
-	//nw.firstCache[id] = &cached{
-	//	data: bdata,
-	//	age:  time.Now(),
-	//}
-	return bdata, err
-}
-*/
-
-func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
-	// check cache
+	// check the cache for this page
 	key := fmt.Sprintf("snapshot-%d", id)
 	sctx, cfn := context.WithTimeout(ctx, time.Second*2)
 	defer cfn()
@@ -97,7 +59,6 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	}
 
 	nw.logger.Infow("getting record", "id", id)
-	// find peer
 	snap, err := nw.records.Get(ctx, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting snapshot record")
@@ -106,13 +67,13 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "getting mirror records")
 	}
-	// make array of peers to query
-	var peers []archive.Peer
+
+	// make an array of all peers who have this page
+	var peers []core.Peer
 	peers = append(peers, snap.Peer)
 	peers = append(peers, mirrors...)
 
 	nw.logger.Infow("messaging peers", "snap", snap)
-
 	data, err, _ := nw.requestGroup.Do(fmt.Sprintf("network-get-%d", id), func() (interface{}, error) {
 		return nw.getWithFallback(ctx, snap, peers)
 	})
@@ -127,6 +88,7 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	return bdata, nil
 }
 
+// Store will query a url and store its content in the specified peer.
 func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, error) {
 	// find peer to store in
 	peer, err := nw.records.GetPeer(ctx, peerID)
@@ -153,11 +115,11 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 	}
 
 	// add page record
-	recID, err := nw.records.Add(ctx, archive.Snapshot{
+	recID, err := nw.records.Add(ctx, core.Snapshot{
 		Sum:  checkSum,
 		URL:  url,
 		Time: time.Now(),
-		Peer: archive.Peer{
+		Peer: core.Peer{
 			ID: peerID,
 		},
 	})
@@ -182,8 +144,9 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 	return int(recID), nil
 }
 
+// sendToMirrors will pick a random selection of peers and send them a page file to store.
 func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []byte) error {
-	peers, err := nw.records.GetPeers(ctx, nw.mirrors*searchFactor)
+	peers, err := nw.records.GetPeers(ctx, nw.mirrors*mirrorAttempts)
 	if err != nil {
 		return errors.Wrap(err, "getting list of peers")
 	}
@@ -191,7 +154,7 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 	for needed > 0 && len(peers) > 0 {
 		peer := peers[0]
 		peers = peers[1:]
-		// skip main peer as this wil already be stored
+		// skip main peer as this page will already be stored
 		if peer.ID == exID {
 			continue
 		}
@@ -208,12 +171,13 @@ func (nw *Network) sendToMirrors(ctx context.Context, recID, exID int, data []by
 		needed--
 	}
 	if needed > 0 {
-		return errors.New("failed to find enough available peers")
+		return errors.New("could not find enough available peers")
 	}
 	return nil
 }
 
-func (nw *Network) getWithFallback(ctx context.Context, snap archive.Snapshot, peers []archive.Peer) ([]byte, error) {
+// getWithFallback will return a page file from one of the peers supplied.
+func (nw *Network) getWithFallback(ctx context.Context, snap core.Snapshot, peers []core.Peer) ([]byte, error) {
 	for _, peer := range peers {
 		data, err := nw.getFrom(ctx, snap, peer.Address)
 		if err != nil {
@@ -222,11 +186,11 @@ func (nw *Network) getWithFallback(ctx context.Context, snap archive.Snapshot, p
 		}
 		return data, nil
 	}
-	// TODO: get from all peers at once
 	return nil, errors.New("none available")
 }
 
-func (nw *Network) getFrom(ctx context.Context, snap archive.Snapshot, address string) ([]byte, error) {
+// getFrom will return a page file from a single peer with the address supplied.
+func (nw *Network) getFrom(ctx context.Context, snap core.Snapshot, address string) ([]byte, error) {
 	nw.logger.Infow("getting file from peer", "snap", snap, "addr", address)
 
 	target := fmt.Sprintf("http://%s%s", address, "/get")
@@ -269,6 +233,7 @@ func (nw *Network) getFrom(ctx context.Context, snap archive.Snapshot, address s
 	return result, nil
 }
 
+// sendTo will store a page file in the peer at the given address.
 func sendTo(ctx context.Context, address string, id int, file []byte) error {
 	data, err := compress(file)
 	if err != nil {

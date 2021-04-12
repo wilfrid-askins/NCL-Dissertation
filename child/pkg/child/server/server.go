@@ -1,3 +1,5 @@
+// Package server is used to serve HTTP endpoints providing the storage of files for the child server.
+
 package server
 
 import (
@@ -12,6 +14,7 @@ import (
 	"wilfrid.me/archive-child/pkg/child/file"
 )
 
+// Server stores the data of the web server.
 type Server struct {
 	addr     string
 	files    *file.Repository
@@ -19,6 +22,7 @@ type Server struct {
 	logger   *zap.SugaredLogger
 }
 
+// New creates an instance of the web server.
 func New(port int, files *file.Repository, logger *zap.SugaredLogger) *Server {
 	s := &Server{
 		addr:   fmt.Sprintf("0.0.0.0:%d", port),
@@ -35,6 +39,7 @@ func New(port int, files *file.Repository, logger *zap.SugaredLogger) *Server {
 	return s
 }
 
+// Listen will listen and serve on the required endpoints till shutdown is called.
 func (s *Server) Listen() error {
 	err := s.httpServ.ListenAndServe()
 	if err != nil {
@@ -43,6 +48,7 @@ func (s *Server) Listen() error {
 	return nil
 }
 
+// storePage is used to handle storage requests.
 func (s *Server) storePage(w http.ResponseWriter, r *http.Request) {
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -69,6 +75,7 @@ func (s *Server) storePage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// getPage handles the retrieval of stored pages.
 func (s *Server) getPage(w http.ResponseWriter, r *http.Request) {
 	idStr := r.Header.Get("id")
 	id, err := strconv.Atoi(idStr)
@@ -89,6 +96,7 @@ func (s *Server) getPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Shutdown will end the serving of the HTTP server.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServ.Shutdown(ctx)
 }

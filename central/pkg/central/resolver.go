@@ -2,15 +2,17 @@ package central
 
 import (
 	"database/sql"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	_ "github.com/go-sql-driver/mysql"
 	"go.uber.org/zap"
-	"time"
 	"wilfrid.me/archive-central/pkg/central/peer"
 	"wilfrid.me/archive-central/pkg/central/record"
 	"wilfrid.me/archive-central/pkg/central/web"
 )
 
+// Resolver puts together all the dependencies of the server central.
 type Resolver struct {
 	db      *sql.DB
 	cache   *redis.Client
@@ -21,17 +23,18 @@ type Resolver struct {
 	config  Config
 }
 
+// NewResolver returns a new resolver for the given config.
 func NewResolver(config Config) *Resolver {
 	return &Resolver{
 		config: config,
 	}
 }
 
+// Database returns a database singleton, creating one if needed.
 func (re *Resolver) Database() *sql.DB {
 	if re.db != nil {
 		return re.db
 	}
-	// connect to database
 	conn, err := sql.Open("mysql", re.config.Database.DatasourceAddress())
 	if err != nil {
 		re.Logger().Fatalw("connecting to db", "err", err)
@@ -43,6 +46,7 @@ func (re *Resolver) Database() *sql.DB {
 	return re.db
 }
 
+// Cache returns a cache connection singleton.
 func (re *Resolver) Cache() *redis.Client {
 	if re.cache != nil {
 		return re.cache
@@ -61,6 +65,7 @@ func (re *Resolver) Cache() *redis.Client {
 	return re.cache
 }
 
+// Group returns a network peer group singleton.
 func (re *Resolver) Group() peer.Group {
 	if re.group != nil {
 		return re.group
@@ -69,6 +74,7 @@ func (re *Resolver) Group() peer.Group {
 	return re.group
 }
 
+// WebServer returns a server to take web requests.
 func (re *Resolver) WebServer() *web.Server {
 	if re.server != nil {
 		return re.server
@@ -77,6 +83,7 @@ func (re *Resolver) WebServer() *web.Server {
 	return re.server
 }
 
+// Records returns a repository to interact with snapshot metadata.
 func (re *Resolver) Records() record.Repository {
 	if re.records != nil {
 		return re.records
@@ -89,6 +96,7 @@ func (re *Resolver) Records() record.Repository {
 	return re.records
 }
 
+// Logger returns a zap sugared logger instance.
 func (re *Resolver) Logger() *zap.SugaredLogger {
 	if re.logger != nil {
 		return re.logger

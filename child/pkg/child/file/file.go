@@ -1,3 +1,5 @@
+// Package file is used to store/retrieve page files.
+
 package file
 
 import (
@@ -7,10 +9,12 @@ import (
 	"os"
 )
 
+// Repository interacts with the child server file system.
 type Repository struct {
 	storePath string
 }
 
+// NewRepository returns a new instance of the file repository.
 func NewRepository(storePath string) (*Repository, error) {
 	if _, err := os.Stat(storePath); os.IsNotExist(err) {
 		if err := os.Mkdir(storePath, os.ModePerm); err != nil {
@@ -22,10 +26,11 @@ func NewRepository(storePath string) (*Repository, error) {
 	}, nil
 }
 
+// Get returns the page file with the given ID.
 func (r *Repository) Get(id int) ([]byte, error) {
 	// decide where data was stored
 	path := fmt.Sprintf("%s%d.html", r.storePath, id)
-	// read snapshot data from file
+	// read the snapshot data from file
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading file")
@@ -33,9 +38,10 @@ func (r *Repository) Get(id int) ([]byte, error) {
 	return data, nil
 }
 
+// Store will save the given data for the given page ID.
 func (r *Repository) Store(id int, data []byte) error {
-	// decide file for data
+	// decide a the file for the data
 	path := fmt.Sprintf("%s%d.html", r.storePath, id)
-	// write data to file
+	// write the data to file
 	return ioutil.WriteFile(path, data, os.ModePerm)
 }

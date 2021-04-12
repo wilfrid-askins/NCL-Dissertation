@@ -16,8 +16,10 @@ import (
 	"wilfrid.me/archive-test/internal/tester"
 )
 
+// root is where the program will look for test configuration files.
 const root = "./tests"
 
+// tests is the list of all
 var tests = []string{
 	"test1",
 	"test2",
@@ -35,7 +37,6 @@ func main() {
 	box := packr.New(testName, root+"/"+testName)
 
 	// load config and create resolver
-	// move this later
 	config := central.Config{}
 	configData, err := box.Find("central.json")
 	if err != nil {
@@ -45,17 +46,19 @@ func main() {
 		logger.Fatal(err.Error())
 	}
 
-	// load parameters
+	// load test files
 	params := tester.Config{}
 	paramsData, err := box.Find("test.json")
 	if err := json.Unmarshal(paramsData, &params); err != nil {
 		logger.Fatal(err)
 	}
 
+	// create tester instance
 	test, err := tester.New(ctx, params, config, logger)
 	if err != nil {
 		logger.Fatal(err)
 	}
+	// execute test
 	if err := test.Execute(ctx); err != nil {
 		logger.Fatal(err)
 	}
@@ -69,6 +72,7 @@ func main() {
 	writeResult(testName, data.Bytes())
 }
 
+// writeResult writes bytes to a specified file.
 func writeResult(testName string, data []byte) {
 	fileName := fmt.Sprintf("%s-%s.xlsx", testName, time.Now().Format("2006-01-02T15-04-05"))
 	fo, err := os.Create(fileName)
@@ -86,6 +90,7 @@ func writeResult(testName string, data []byte) {
 	}
 }
 
+// pickTest will ask a user to pick a valid test name.
 func pickTest() string {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Enter test to run:")

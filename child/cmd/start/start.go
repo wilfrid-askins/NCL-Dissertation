@@ -5,6 +5,7 @@ import (
 	"wilfrid.me/archive-child/pkg/child"
 )
 
+// main is used to test the child server using a static configuration.
 func main() {
 	path, err := os.Getwd()
 	if err != nil {

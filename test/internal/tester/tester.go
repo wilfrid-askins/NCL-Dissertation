@@ -1,3 +1,6 @@
+// Package tester contains an app to send requests to the archive server, before recording its responses to an Excel file.
+// It can simulate both the central and peer group components of the system in-memory with a file store in the directory /store.
+
 package tester
 
 import (
@@ -19,6 +22,7 @@ import (
 )
 
 type (
+	// Config is used to describe the current test being executed.
 	Config struct {
 		Name  string `json:"name"`
 		Store struct {
@@ -44,6 +48,7 @@ type (
 		}
 	}
 
+	// Tester is the singleton which holds the current working values of a test.
 	Tester struct {
 		records       record.Repository
 		db            *sql.DB
@@ -58,12 +63,14 @@ type (
 		config        Config
 	}
 
+	// Job describes a single HTTP GET request (either store or retrieve) to be sent to the archive server.
 	Job struct {
 		target  string
 		execAt  time.Time
 		reqType string
 	}
 
+	// ResultRow is a result produced one per job and written to the output file.
 	ResultRow struct {
 		Type        string  `xlsx:"1"`
 		Target      string  `xlsx:"2"`
@@ -76,9 +83,11 @@ type (
 		DataSize    int     `xlsx:"9"`
 	}
 
+	// CancelFunc is used to shutdown a peer to simulate a failure.
 	CancelFunc func(ctx context.Context) error
 )
 
+// New returns a new Tester instance.
 func New(ctx context.Context, config Config, centralConfig central.Config, logger *zap.SugaredLogger) (*Tester, error) {
 	ts := &Tester{config: config, logger: logger}
 
@@ -95,6 +104,7 @@ func New(ctx context.Context, config Config, centralConfig central.Config, logge
 	return ts, nil
 }
 
+// Execute runs the specified test and writes results to the in-memory spreadsheet.
 func (ts *Tester) Execute(ctx context.Context) error {
 	if err := ts.initTables(ctx); err != nil {
 		return errors.Wrap(err, "initiating tables")
@@ -178,7 +188,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 		return errors.Wrap(err, "querying snapshots")
 	}
 
-	// shutdown 'failed' nodes
+	// shutdown failed nodes
 	failures := getFailures(ts.config.Peers.Number, ts.config.Peers.Failures)
 	for key, val := range failures {
 		if !val {
@@ -210,6 +220,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 	return nil
 }
 
+// getResult executes the HTTP request specified by a job and returns the result of the request.
 func getResult(start time.Time, job Job) ResultRow {
 	client := http.Client{
 		Timeout: 10 * time.Second,
@@ -239,6 +250,7 @@ func getResult(start time.Time, job Job) ResultRow {
 	return rowVal
 }
 
+// initTables removes all records from the central database and inserts the records required for this test.
 func (ts *Tester) initTables(ctx context.Context) error {
 	// clear old tables
 	cmds := []string{
@@ -264,6 +276,7 @@ func (ts *Tester) initTables(ctx context.Context) error {
 	return nil
 }
 
+// initAddresses determines which addresses are targets for this test (local or external).
 func (ts *Tester) initAddresses(config Config) {
 	if config.External.Use {
 		ts.localAddress = config.External.LocalAddress
@@ -274,6 +287,7 @@ func (ts *Tester) initAddresses(config Config) {
 	ts.targetAddress = config.Internal.Target
 }
 
+// createCentral creates and runs a central server instance using the supplied configs.
 func (ts *Tester) createCentral(_ context.Context, config Config, centConfig central.Config) (record.Repository, *sql.DB, <-chan error) {
 	cent := central.NewResolver(centConfig)
 	errs := make(chan error)
@@ -291,10 +305,10 @@ func (ts *Tester) createCentral(_ context.Context, config Config, centConfig cen
 	return cent.Records(), cent.Database(), errs
 }
 
-func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]CancelFunc, <-chan error) {
+// createPeers will generate a list of peers of configured length, then serve those peers on their allocated ports.
+func (ts *Tester) createPeers(_ context.Context) ([]archive.Peer, map[int]CancelFunc, <-chan error) {
 	storePath := "./store"
 	portStart := 25566
-	// portEnd := 30000
 	var peers []archive.Peer
 	peerCancels := make(map[int]CancelFunc)
 	errs := make(chan error)
@@ -319,6 +333,7 @@ func (ts *Tester) createPeers(ctx context.Context) ([]archive.Peer, map[int]Canc
 	return peers, peerCancels, errs
 }
 
+// getFailures decides randomly which peer nodes have failed given a required number.
 func getFailures(nodes, fails int) map[int]bool {
 	failCount := 0
 	failures := make(map[int]bool)

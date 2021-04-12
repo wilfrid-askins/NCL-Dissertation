@@ -15,5 +15,8 @@
     "username": "",
     "password": "",
     "database": 0
+  },
+  "snapshots": {
+    "mirrors": 0
   }
 }

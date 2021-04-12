@@ -1,15 +1,18 @@
+// Package web provides functionality for the central web server, including the front-end interface and backend API.
+
 package web
 
 import (
 	_ "embed"
 	"fmt"
-	"github.com/go-chi/chi"
-	"go.uber.org/zap"
 	"net/http"
 	"strconv"
+
+	"github.com/go-chi/chi"
+	"go.uber.org/zap"
+	"wilfrid.me/archive-central/pkg/central/core"
 	"wilfrid.me/archive-central/pkg/central/peer"
 	"wilfrid.me/archive-central/pkg/central/record"
-	"wilfrid.me/netpb/pkg/archive"
 )
 
 //go:embed pages/store.html
@@ -18,12 +21,14 @@ var storeForm []byte
 //go:embed pages/register.html
 var registerForm []byte
 
+// Server stores the data sources required by the web server.
 type Server struct {
 	group   peer.Group
 	records record.Repository
 	logger  *zap.SugaredLogger
 }
 
+// NewServer returns a new web server instance.
 func NewServer(group peer.Group, records record.Repository, logger *zap.SugaredLogger) *Server {
 	return &Server{
 		group:   group,
@@ -32,6 +37,7 @@ func NewServer(group peer.Group, records record.Repository, logger *zap.SugaredL
 	}
 }
 
+// GetRouter returns a chi web router will all web server routes stored.
 func (s *Server) GetRouter() *chi.Mux {
 	router := chi.NewMux()
 	router.Get("/api/page/{id}", s.GetPage)
@@ -42,6 +48,7 @@ func (s *Server) GetRouter() *chi.Mux {
 	return router
 }
 
+// GetPage handles route /api/page/{id} by returning the page of that ID.
 func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
@@ -66,6 +73,7 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// StorePage handles route /api/store.
 func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Query().Get("url")
 	peer := r.URL.Query().Get("peer")
@@ -92,11 +100,12 @@ func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// RegisterPeer handles /api/register (the peer registry backend).
 func (s *Server) RegisterPeer(w http.ResponseWriter, r *http.Request) {
 	address := r.URL.Query().Get("address")
 	s.logger.Infow("register", "address", address)
 
-	recID, err := s.records.AddPeer(r.Context(), archive.Peer{
+	recID, err := s.records.AddPeer(r.Context(), core.Peer{
 		Address: address,
 	})
 	if err != nil {
@@ -112,6 +121,7 @@ func (s *Server) RegisterPeer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// staticPage handles all pages which are just unchanging HTML content.
 func (s *Server) staticPage(page []byte) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, err := w.Write(page); err != nil {
