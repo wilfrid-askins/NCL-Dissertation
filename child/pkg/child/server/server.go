@@ -30,8 +30,8 @@ func New(port int, files *file.Repository, logger *zap.SugaredLogger) *Server {
 		logger: logger,
 	}
 	router := chi.NewMux()
-	router.Post("/store", s.storePage)
-	router.Get("/get", s.getPage)
+	router.Put("/page/{id}", s.storePage)
+	router.Get("/page/{id}", s.getPage)
 	s.httpServ = http.Server{
 		Addr:    s.addr,
 		Handler: router,
@@ -56,7 +56,7 @@ func (s *Server) storePage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	idStr := r.Header.Get("id")
+	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		s.logger.Errorw("parsing file id", "msg", err.Error())
@@ -77,7 +77,7 @@ func (s *Server) storePage(w http.ResponseWriter, r *http.Request) {
 
 // getPage handles the retrieval of stored pages.
 func (s *Server) getPage(w http.ResponseWriter, r *http.Request) {
-	idStr := r.Header.Get("id")
+	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		s.logger.Errorw("parsing file id", "msg", err.Error())

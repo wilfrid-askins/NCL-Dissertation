@@ -110,7 +110,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 	if err := ts.initTables(ctx); err != nil {
 		return errors.Wrap(err, "initiating tables")
 	}
-	// calculate delays
+	// calculate job delays
 	getDuration, err := time.ParseDuration(ts.config.Get.Duration)
 	if err != nil {
 		return errors.Wrap(err, "parsing getDuration")

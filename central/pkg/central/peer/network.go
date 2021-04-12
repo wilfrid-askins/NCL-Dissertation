@@ -193,7 +193,7 @@ func (nw *Network) getWithFallback(ctx context.Context, snap core.Snapshot, peer
 func (nw *Network) getFrom(ctx context.Context, snap core.Snapshot, address string) ([]byte, error) {
 	nw.logger.Infow("getting file from peer", "snap", snap, "addr", address)
 
-	target := fmt.Sprintf("http://%s%s", address, "/get")
+	target := fmt.Sprintf("http://%s/page/%d", address, snap.ID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "making request")
@@ -239,8 +239,8 @@ func sendTo(ctx context.Context, address string, id int, file []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "compressing file")
 	}
-	target := fmt.Sprintf("http://%s%s", address, "/store")
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(data))
+	target := fmt.Sprintf("http://%s/page/%d", address, id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, target, bytes.NewReader(data))
 	if err != nil {
 		return errors.Wrap(err, "making request")
 	}
