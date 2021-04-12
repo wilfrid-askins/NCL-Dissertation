@@ -1,5 +1,4 @@
 // Package peer provides functionality for interacting with the files stored by a group of machines.
-
 package peer
 
 import (

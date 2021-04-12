@@ -1,5 +1,4 @@
 // Package records provides functionality for storing the metadata of peers, snapshots and mirrors.
-
 package record
 
 import (

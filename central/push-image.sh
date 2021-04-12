@@ -1,5 +1,3 @@
-# https://cloud.google.com/kubernetes-engine/docs/tutorials/hello-app
-
 # create docker image of application
 docker build -t gcr.io/ultra-zenith-309512/central-app:latest .
 # add to image registry

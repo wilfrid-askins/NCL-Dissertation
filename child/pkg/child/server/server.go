@@ -1,16 +1,16 @@
 // Package server is used to serve HTTP endpoints providing the storage of files for the child server.
-
 package server
 
 import (
 	"context"
 	"fmt"
-	"github.com/go-chi/chi"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"net/http"
 	"strconv"
+
+	"github.com/go-chi/chi"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"wilfrid.me/archive-child/pkg/child/file"
 )
 

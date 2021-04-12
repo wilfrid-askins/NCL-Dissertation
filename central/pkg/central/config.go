@@ -1,5 +1,4 @@
 // Package central configures and resolves the dependencies of the central archive server.
-
 package central
 
 import (

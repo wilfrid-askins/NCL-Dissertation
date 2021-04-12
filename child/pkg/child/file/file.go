@@ -1,12 +1,12 @@
 // Package file is used to store/retrieve page files.
-
 package file
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"os"
+
+	"github.com/pkg/errors"
 )
 
 // Repository interacts with the child server file system.

@@ -7,11 +7,12 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/gobuffalo/packr/v2"
-	"go.uber.org/zap"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gobuffalo/packr/v2"
+	"go.uber.org/zap"
 	"wilfrid.me/archive-central/pkg/central"
 	"wilfrid.me/archive-test/internal/tester"
 )

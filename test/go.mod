@@ -6,8 +6,6 @@ replace wilfrid.me/archive-central v0.0.0 => ../central/
 
 replace wilfrid.me/archive-child v0.0.0 => ../child/
 
-replace wilfrid.me/netpb v0.0.0 => ../netpb/
-
 require (
 	github.com/gobuffalo/packr/v2 v2.8.1
 	github.com/pkg/errors v0.9.1
@@ -15,5 +13,4 @@ require (
 	go.uber.org/zap v1.16.0
 	wilfrid.me/archive-central v0.0.0
 	wilfrid.me/archive-child v0.0.0
-	wilfrid.me/netpb v0.0.0
 )

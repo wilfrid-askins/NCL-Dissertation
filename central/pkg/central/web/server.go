@@ -1,5 +1,4 @@
 // Package web provides functionality for the central web server, including the front-end interface and backend API.
-
 package web
 
 import (

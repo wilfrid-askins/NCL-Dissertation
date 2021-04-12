@@ -1,24 +1,25 @@
 // Package tester contains an app to send requests to the archive server, before recording its responses to an Excel file.
 // It can simulate both the central and peer group components of the system in-memory with a file store in the directory /store.
-
 package tester
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/tealeg/xlsx"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"sync"
 	"time"
+
+	"wilfrid.me/archive-central/pkg/central/core"
+
+	"github.com/pkg/errors"
+	"github.com/tealeg/xlsx"
+	"go.uber.org/zap"
 	"wilfrid.me/archive-central/pkg/central"
 	"wilfrid.me/archive-central/pkg/central/record"
 	"wilfrid.me/archive-child/pkg/child"
-	"wilfrid.me/netpb/pkg/archive"
 )
 
 type (
@@ -52,7 +53,7 @@ type (
 	Tester struct {
 		records       record.Repository
 		db            *sql.DB
-		peers         []archive.Peer
+		peers         []core.Peer
 		peerCancels   map[int]CancelFunc
 		localAddress  string
 		targetAddress string
@@ -306,10 +307,10 @@ func (ts *Tester) createCentral(_ context.Context, config Config, centConfig cen
 }
 
 // createPeers will generate a list of peers of configured length, then serve those peers on their allocated ports.
-func (ts *Tester) createPeers(_ context.Context) ([]archive.Peer, map[int]CancelFunc, <-chan error) {
+func (ts *Tester) createPeers(_ context.Context) ([]core.Peer, map[int]CancelFunc, <-chan error) {
 	storePath := "./store"
 	portStart := 25566
-	var peers []archive.Peer
+	var peers []core.Peer
 	peerCancels := make(map[int]CancelFunc)
 	errs := make(chan error)
 
@@ -319,7 +320,7 @@ func (ts *Tester) createPeers(_ context.Context) ([]archive.Peer, map[int]Cancel
 			Port:      port,
 			StorePath: fmt.Sprintf("%s/%d/", storePath, i),
 		})
-		peers = append(peers, archive.Peer{
+		peers = append(peers, core.Peer{
 			ID:      i,
 			Address: fmt.Sprintf("%s:%d", ts.localAddress, port),
 		})
