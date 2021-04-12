@@ -56,7 +56,7 @@ func (s *Server) storePage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	idStr := r.URL.Query().Get("id")
+	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		s.logger.Errorw("parsing file id", "msg", err.Error())
@@ -77,7 +77,7 @@ func (s *Server) storePage(w http.ResponseWriter, r *http.Request) {
 
 // getPage handles the retrieval of stored pages.
 func (s *Server) getPage(w http.ResponseWriter, r *http.Request) {
-	idStr := r.URL.Query().Get("id")
+	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		s.logger.Errorw("parsing file id", "msg", err.Error())
