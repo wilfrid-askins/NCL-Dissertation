@@ -1,7 +1,7 @@
 {
   "name": "External Test",
   "store": {
-    "duration": "30s",
+    "duration": "60s",
     "per-second": 5,
     "targets": [
       "https://google.com",
@@ -71,7 +71,7 @@
     ]
   },
   "get": {
-    "duration": "30s",
+    "duration": "60s",
     "per-second": 10
   },
   "peers": {
