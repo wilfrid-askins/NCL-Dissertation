@@ -198,7 +198,6 @@ func (nw *Network) getFrom(ctx context.Context, snap core.Snapshot, address stri
 	if err != nil {
 		return nil, errors.Wrap(err, "making request")
 	}
-	req.Header.Set("id", strconv.Itoa(snap.ID))
 
 	client := http.Client{}
 	resp, err := client.Do(req)
