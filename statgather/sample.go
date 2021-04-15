@@ -1,7 +1,7 @@
 package main
 
 import (
-	"RedditStats/article"
+	"statsgather/article"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -20,10 +20,12 @@ const (
 	year       = "2019"
 )
 
+// Response is a response decoded from the Core API.
 type Response struct {
 	Articles []article.Article `json:"data"`
 }
 
+// main will take sampleSize articles from the year specified.
 func main() {
 	needed := sampleSize
 	page := 1
@@ -35,18 +37,17 @@ func main() {
 	client := http.Client{}
 outer:
 	for {
+		// get next page of content
 		target := getURL(apiKey, year, page, pageSize)
-
 		req, err := http.NewRequest("GET", target, nil)
 		if err != nil {
 			println(err.Error())
 			continue
 		}
-		req.Header.Set("User-Agent", "Golang_Archive_Bot/1.0")
-
+		req.Header.Set("User-Agent", "Golang_Sample_Bot/1.0")
 		resp, err := client.Do(req)
 		if err != nil {
-			println(err.Error())
+			fmt.Println(err.Error())
 			continue
 		}
 		data, err := ioutil.ReadAll(resp.Body)
@@ -54,9 +55,10 @@ outer:
 			panic(err)
 		}
 
+		// decode API response
 		decode := Response{}
 		if err := json.Unmarshal(data, &decode); err != nil {
-			println(err.Error())
+			fmt.Println(err.Error())
 			continue
 		}
 
@@ -64,8 +66,9 @@ outer:
 			if len(article.DownloadURL) == 0 {
 				continue
 			}
-			println(article.DownloadURL)
+			fmt.Println(article.DownloadURL)
 
+			// put article into spreadsheet
 			row := sheet.AddRow()
 			row.WriteStruct(&article, -1)
 			needed--
@@ -78,6 +81,7 @@ outer:
 		page += 1
 	}
 
+	// write spreadsheet to file
 	var data bytes.Buffer
 	writer := bufio.NewWriter(&data)
 	if err := sheet.File.Write(writer); err != nil {
@@ -86,6 +90,7 @@ outer:
 	writeResult(data.Bytes())
 }
 
+// writeResult will write spreadsheet data to a timestamped file.
 func writeResult(data []byte) {
 	fileName := fmt.Sprintf("posts-%s.xlsx", time.Now().Format("2006-01-02T15-04-05"))
 	fo, err := os.Create(fileName)
@@ -103,6 +108,7 @@ func writeResult(data []byte) {
 	}
 }
 
+// getURL returns the Core API URL with the criteria specified.
 func getURL(apiKey, year string, page, pageSize int) string {
 	return fmt.Sprintf("https://core.ac.uk:443/api-v2/articles/search/year:%s?page=%d&pageSize=%d&apiKey=%s", year, page, pageSize, apiKey)
 }
