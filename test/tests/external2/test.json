@@ -1,5 +1,5 @@
 {
-  "name": "No cache retrieval Test",
+  "name": "Peak retrieval test",
   "store": {
     "duration": "45s",
     "per-second": 5,
@@ -72,7 +72,7 @@
   },
   "get": {
     "duration": "30s",
-    "per-second": 15
+    "per-second": 40
   },
   "peers": {
     "number": 100,
