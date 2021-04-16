@@ -27,6 +27,7 @@ var tests = []string{
 	"test3",
 	"external1",
         "external2",
+        "external3",
 }
 
 func main() {
