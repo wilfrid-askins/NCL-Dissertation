@@ -1,7 +1,7 @@
 package main
 
 import (
-	"RedditStats/article"
+	"statsgather/article"
 	"fmt"
 	"github.com/tealeg/xlsx"
 	"io/ioutil"
@@ -16,6 +16,7 @@ const (
 	sheetName = "For year 2012"
 )
 
+// main will download every article in the specified spreadsheet.
 func main() {
 	page := 1
 	f, err := xlsx.OpenFile(fileName)
@@ -26,44 +27,42 @@ func main() {
 	client := http.Client{}
 
 	for _, row := range sheet.Rows {
+		// read article from spreadsheet
 		var article article.Article
 		if err := row.ReadStruct(&article); err != nil {
 			panic(err)
 		}
-		println(article.DownloadURL)
+		fmt.Println(article.DownloadURL)
 
-		//if article.CountWBM != 0 || article.CountGoogle != 0 {
-		//	continue
-		//}
-
+		// if article not downloaded, find now
 		pdfFileName := fmt.Sprintf("./files/%s.pdf", article.ID)
 		if fileExists(pdfFileName) {
 			continue
 		}
-
 		target, works := convertURL(article.DownloadURL)
 		if !works {
 			continue
 		}
-
 		req, err := http.NewRequest("GET", target, nil)
 		if err != nil {
-			println(err.Error())
+			fmt.Println(err.Error())
 			continue
 		}
-		req.Header.Set("User-Agent", "Golang_Archive_Bot/1.0")
+		req.Header.Set("User-Agent", "Golang_Sample_Bot/1.0")
 
+		// request and download article
 		resp, err := client.Do(req)
 		if err != nil {
-			println(err.Error())
+			fmt.Println(err.Error())
 			continue
 		}
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			println(err.Error())
+			fmt.Println(err.Error())
 			continue
 		}
 
+		// save file
 		fo, err := os.Create(pdfFileName)
 		if err != nil {
 			panic(err)
@@ -76,27 +75,13 @@ func main() {
 			panic(err)
 		}
 
-		//res, _, err := docconv.ConvertPDF(bytes.NewReader(data))
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
-		//article.CountGoogle = strings.Count(res, "webcache.googleusercontent.com/")
-		//article.CountWBM = strings.Count(res, "web.archive.org/web/")
-		//row.WriteStruct(&article, -1)
-
 		fmt.Printf("%d downloaded\n", page)
 		time.Sleep(time.Second * 1)
 		page += 1
 	}
-
-	//var data bytes.Buffer
-	//writer := bufio.NewWriter(&data)
-	//if err := sheet.File.Write(writer); err != nil {
-	//	panic(err)
-	//}
-	//writeFilledResult(data.Bytes())
 }
 
+// convertURL returns a download URL for an article if possible.
 func convertURL(url string) (string, bool) {
 	if strings.Contains(url, "arxiv.org/abs/") {
 		parts := strings.Split(url, "/")

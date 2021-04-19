@@ -1,0 +1,22 @@
+{
+  "database": {
+    "driver": "mysql",
+    "address": "10.0.4.5",
+    "port": 3306,
+    "name": "central",
+    "username": "central-user",
+    "password": "2w5j8a0fh4ja39s5"
+  },
+  "http-server": {
+    "port": 5000
+  },
+  "cache": {
+    "address": "10.0.5.5:6379",
+    "username": "",
+    "password": "",
+    "database": 0
+  },
+  "snapshots": {
+    "mirrors": 0
+  }
+}
