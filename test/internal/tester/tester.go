@@ -224,7 +224,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 // getResult executes the HTTP request specified by a job and returns the result of the request.
 func getResult(start time.Time, job Job) ResultRow {
 	client := http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 20 * time.Second,
 	}
 	rowVal := ResultRow{}
 	startReq := time.Now()

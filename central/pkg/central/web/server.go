@@ -66,7 +66,7 @@ func (s *Server) GetPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logger.Infow("writing page", "id", id, "len", len(page))
-	w.Header().Set("Content-Type", "text/pages")
+	w.Header().Set("Content-Type", "text/html")
 	if _, err := w.Write(page); err != nil {
 		s.logger.Errorw("failed to write page data", "msg", err.Error())
 	}
@@ -93,7 +93,7 @@ func (s *Server) StorePage(w http.ResponseWriter, r *http.Request) {
 	resp := []byte(fmt.Sprintf("%d", recID))
 
 	s.logger.Infow("store successful", "url", url, "peer", peerID)
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/plain")
 	if _, err := w.Write(resp); err != nil {
 		s.logger.Errorw("failed to write page data", "peer", peerID, "msg", err.Error())
 	}
@@ -114,7 +114,7 @@ func (s *Server) RegisterPeer(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := []byte(fmt.Sprintf("%d", recID))
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/plain")
 	if _, err := w.Write(resp); err != nil {
 		s.logger.Errorw("failed to write register response", "msg", err.Error())
 	}
