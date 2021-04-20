@@ -72,7 +72,7 @@
   },
   "get": {
     "duration": "30s",
-    "per-second": 20
+    "per-second": 30
   },
   "peers": {
     "number": 100,
