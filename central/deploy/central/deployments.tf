@@ -32,7 +32,7 @@ resource "kubernetes_deployment" "app" {
           }
           env {
             name = "CONSUL_ADDRESS"
-            value = "35.189.117.7:8500"
+            value = "34.89.30.15:8500"
           }
         }
       }
