@@ -72,7 +72,7 @@
   },
   "get": {
     "duration": "30s",
-    "per-second": 7
+    "per-second": 15
   },
   "peers": {
     "number": 100,
@@ -80,7 +80,7 @@
   },
   "external": {
     "use": true,
-    "target-address": "35.242.170.238",
+    "target-address": "34.89.115.108",
     "local-address": "35.246.70.76"
   }
 }
