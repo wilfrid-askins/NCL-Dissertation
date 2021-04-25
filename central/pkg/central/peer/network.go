@@ -47,16 +47,16 @@ func NewNetwork(records record.Repository, cache *redis.Client, mirrors int, log
 // Get returns the file of the page with the specified id.
 func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	// check the cache for this page
-	//key := fmt.Sprintf("snapshot-%d", id)
-	//sctx, cfn := context.WithTimeout(ctx, time.Second*2)
-	//defer cfn()
-	//cached, err := nw.cache.Get(sctx, key).Bytes()
-	//if err != nil && err != redis.Nil {
-	//	nw.logger.Errorw("failed to query cache", "msg", err.Error())
-	//}
-	//if err != redis.Nil {
-	//	return cached, nil
-	//}
+	key := fmt.Sprintf("snapshot-%d", id)
+	sctx, cfn := context.WithTimeout(ctx, time.Second*2)
+	defer cfn()
+	cached, err := nw.cache.Get(sctx, key).Bytes()
+	if err != nil && err != redis.Nil {
+		nw.logger.Errorw("failed to query cache", "msg", err.Error())
+	}
+	if err != redis.Nil {
+		return cached, nil
+	}
 
 	nw.logger.Infow("getting record", "id", id)
 	snap, err := nw.records.Get(ctx, id)
@@ -82,9 +82,9 @@ func (nw *Network) Get(ctx context.Context, id int) ([]byte, error) {
 	}
 	bdata := (data).([]byte)
 
-	//if err := nw.cache.Set(ctx, key, bdata, cacheTime).Err(); err != nil {
-	//	nw.logger.Errorw("failed to set cache", "snap", snap, "msg", err.Error())
-	//}
+	if err := nw.cache.Set(ctx, key, bdata, cacheTime).Err(); err != nil {
+		nw.logger.Errorw("failed to set cache", "snap", snap, "msg", err.Error())
+	}
 	return bdata, nil
 }
 
@@ -140,7 +140,6 @@ func (nw *Network) Store(ctx context.Context, peerID int, url string) (int, erro
 	if err := sendTo(ctx, peer.Address, int(recID), data); err != nil {
 		return 0, errors.Wrap(err, "sending to main peer")
 	}
-
 	return int(recID), nil
 }
 
