@@ -122,7 +122,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 
 	// create worker pool
 	start := time.Now()
-	poolSize := ts.config.Get.PerSecond * int(getDuration.Seconds())
+	poolSize := ts.config.Store.PerSecond * int(getDuration.Seconds())
 	jobs := make(chan Job, poolSize)
 	results := make(chan ResultRow, poolSize)
 	done := make(chan struct{})
