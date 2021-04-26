@@ -2,7 +2,7 @@
   "name": "Peak storage test",
   "store": {
     "duration": "30s",
-    "per-second": 50,
+    "per-second": 65,
     "targets": [
       "https://google.com",
       "https://youtube.com",
