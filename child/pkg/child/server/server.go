@@ -32,6 +32,7 @@ func New(port int, files *file.Repository, logger *zap.SugaredLogger) *Server {
 	router := chi.NewMux()
 	router.Put("/page/{id}", s.storePage)
 	router.Get("/page/{id}", s.getPage)
+	router.Get("/health", s.getHealth)
 	s.httpServ = http.Server{
 		Addr:    s.addr,
 		Handler: router,
@@ -91,6 +92,15 @@ func (s *Server) getPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := w.Write(data); err != nil {
 		s.logger.Errorw("writing file", "id", id, "msg", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+// getHealth returns a report on the status of this peer.
+func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
+	if _, err := w.Write([]byte("ok")); err != nil {
+		s.logger.Errorw("writing response", "msg", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
