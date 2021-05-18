@@ -19,7 +19,7 @@ resource "google_container_cluster" "primary" {
    "https://www.googleapis.com/auth/devstorage.read_only"
   ]
 
-  machine_type = "e2-small"
+  machine_type = "e2-standard-2"
 
   metadata = {
    disable-legacy-endpoints = "true"

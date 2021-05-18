@@ -122,7 +122,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 
 	// create worker pool
 	start := time.Now()
-	poolSize := ts.config.Get.PerSecond * int(getDuration.Seconds())
+	poolSize := ts.config.Store.PerSecond * int(getDuration.Seconds())
 	jobs := make(chan Job, poolSize)
 	results := make(chan ResultRow, poolSize)
 	done := make(chan struct{})
@@ -224,7 +224,7 @@ func (ts *Tester) Execute(ctx context.Context) error {
 // getResult executes the HTTP request specified by a job and returns the result of the request.
 func getResult(start time.Time, job Job) ResultRow {
 	client := http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 20 * time.Second,
 	}
 	rowVal := ResultRow{}
 	startReq := time.Now()

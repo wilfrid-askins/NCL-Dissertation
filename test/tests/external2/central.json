@@ -1,7 +1,7 @@
 {
   "database": {
     "driver": "mysql",
-    "address": "34.105.186.171",
+    "address": "34.105.254.182",
     "port": 3306,
     "name": "central",
     "username": "central-user",
